@@ -1,4 +1,7 @@
 
+// tape-processor.js v1.6 - keep this in sync with the version-tag in index.html
+console.log('[SP-1 Disintegration] tape-processor.js v1.6 loaded');
+
 class TapeProcessor extends AudioWorkletProcessor {
   constructor(options){
     super();
