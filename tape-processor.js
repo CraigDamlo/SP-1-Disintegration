@@ -69,14 +69,15 @@ class TapeProcessor extends AudioWorkletProcessor {
     }
     const satAmt = progress*0.6;
     const noiseAmt = progress*0.012;
+    const satK = 1 + satAmt*3;
     for(let i=0;i<n;i++){
       let v = this.buf[i];
-      v = Math.tanh(v*(1+satAmt*3))/(1+satAmt*0.5);
+      v = Math.tanh(v*satK)/satK;
       v += (this.rand()*2-1)*noiseAmt;
       this.buf[i] = v;
     }
     const gain = 1 - progress*0.55;
-    for(let i=0;i<n;i++) this.buf[i] *= gain > 0.05 ? (gain/Math.max(gain, 0.999999)) : 1;
+    for(let i=0;i<n;i++) this.buf[i] *= gain;
     this.generation += 1;
     const wear = 0.004+p.wearRate*0.02;
     this.decayFraction = Math.min(1, this.decayFraction + wear);

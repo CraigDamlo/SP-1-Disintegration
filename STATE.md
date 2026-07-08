@@ -56,6 +56,13 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       Pages serves over HTTPS, a proper secure context - this sidesteps
       the file://-related AudioWorklet issues entirely for casual use.
       `launch-sp1.command` is still useful for local dev while editing.
+- [x] Phase 1.2e — bug fix: saturation stage used mismatched drive amounts
+      in numerator/denominator, amplifying quiet signal ~2x per generation
+      instead of preserving unity gain. Compounded across generations,
+      this overpowered the separate fade-out gain and pushed the loop into
+      saturated noise instead of fading to silence. Fixed in all three
+      places it was duplicated: tape-processor.js, the offline exporter in
+      index.html, and disintegration_loops.py.
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
