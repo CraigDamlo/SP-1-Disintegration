@@ -23,7 +23,7 @@
   *{box-sizing:border-box;}
   body{
     margin:0; min-height:100vh; background:#111110;
-    display:flex; align-items:center; justify-content:center; padding:32px 16px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; padding:32px 16px;
     font-family:var(--disp); color:var(--ink);
   }
   .device{
@@ -100,6 +100,22 @@
   input[type=file]{ display:none; }
 
   .hint{ margin-top:12px; font-family:var(--mono); font-size:10px; color:var(--ink-soft); text-align:center; line-height:1.5; }
+
+  .guide{
+    width:min(560px,100%); margin-top:18px; background:var(--panel); border:1px solid var(--panel-edge);
+    border-radius:18px; padding:20px 22px;
+  }
+  .guide h2{
+    font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft);
+    margin:0 0 10px; font-weight:700;
+  }
+  .guide h2:not(:first-child){ margin-top:18px; }
+  .guide dl{ margin:0; }
+  .guide dt{
+    font-family:var(--mono); font-size:11px; font-weight:700; color:var(--ink);
+    margin-top:8px;
+  }
+  .guide dd{ margin:2px 0 0; font-size:12px; color:var(--ink-soft); line-height:1.5; }
 </style>
 </head>
 <body>
@@ -169,6 +185,66 @@
   </div>
 
   <div class="hint">Slots: tap to load, hold to save, double&#8209;tap to clear &mdash; snapshot the current decay state and drop back into it later. Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
+</div>
+
+<div class="guide">
+  <h2>Screen</h2>
+  <dl>
+    <dt>GEN nnn</dt>
+    <dd>How many times the loop has passed the playhead. Each pass is one mutation of the stored buffer &mdash; it never goes backward.</dd>
+    <dt>Condition (PRISTINE / WORN / FADING / DYING / GONE)</dt>
+    <dd>Plain-English read of how far along the decay is, based on the overall decay fraction.</dd>
+    <dt>Waveform</dt>
+    <dd>A live snapshot of the loop's current shape, redrawn after every generation so you can watch it fall apart.</dd>
+    <dt>LED meter</dt>
+    <dd>Fills left to right as decay progresses. Green early, amber mid-way, red near the end.</dd>
+  </dl>
+
+  <h2>Faders (decay parameters)</h2>
+  <dl>
+    <dt>Wear rate</dt>
+    <dd>Overall speed of aging. Higher means every generation pushes the decay further.</dd>
+    <dt>High&#8209;end loss</dt>
+    <dd>How aggressively treble gets filtered away as the tape wears &mdash; this is what makes late generations sound muffled.</dd>
+    <dt>Dropout density</dt>
+    <dd>How much audio goes missing in small chunks, standing in for oxide flaking off the tape.</dd>
+    <dt>Wow &amp; flutter</dt>
+    <dd>Pitch instability that grows as the loop decays &mdash; the wobble/seasick quality of worn tape.</dd>
+  </dl>
+
+  <h2>Slots (the four buttons above the faders)</h2>
+  <dl>
+    <dt>Tap</dt>
+    <dd>Load that slot, restoring its buffer at the exact generation and decay state it was saved at &mdash; not reset to pristine.</dd>
+    <dt>Hold (~0.5s)</dt>
+    <dd>Save the current buffer, whatever state it's in, into that slot. The button flashes orange while saving.</dd>
+    <dt>Double-tap</dt>
+    <dd>Clear that slot.</dd>
+    <dt>Lit dot</dt>
+    <dd>Indicates the slot currently has something saved in it.</dd>
+  </dl>
+
+  <h2>Transport</h2>
+  <dl>
+    <dt>FN</dt>
+    <dd>Currently a visual-only shift key. Hovering shows a note about a hold-for-power gesture on the real hardware, but it isn't wired up here yet.</dd>
+    <dt>Play / Pause</dt>
+    <dd>Starts or stops playback. The first press also spins up the audio engine.</dd>
+    <dt>Reverse</dt>
+    <dd>Flips which direction the playhead reads through the buffer.</dd>
+    <dt>Freeze</dt>
+    <dd>Stops further decay while playback keeps running, so you can sit on whatever generation you've reached.</dd>
+    <dt>Reset tape</dt>
+    <dd>Reloads the last source you started from (the default pad, or your uploaded file) fresh at generation 0.</dd>
+  </dl>
+
+  <h2>Volume &amp; loading</h2>
+  <dl>
+    <dt>Vol &minus; / +</dt>
+    <dd>Steps master volume by 5%. Hold either button to repeat.</dd>
+    <dt>Load your own loop&#8230;</dt>
+    <dd>Upload any audio file. It's downmixed to mono, normalized, and becomes the new pristine source tape.</dd>
+  </dl>
 </div>
 
 <script>
