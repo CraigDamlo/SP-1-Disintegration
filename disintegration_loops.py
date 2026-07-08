@@ -8,6 +8,13 @@ render N "generations" of decay, each one processed from the OUTPUT
 of the previous generation (not the pristine source) — which is what
 gives the real thing its irreversible, one-way arc.
 
+Decay works by permanently killing small chunks of the tape each
+generation (an "alive mask" that only ever loses ground, never
+recovers) rather than an overall volume fade. Surviving audio keeps
+its original level; the piece just has less and less tape left to
+play, exactly like real oxide loss. Think "asdfghjkl" -> "asdf hjkl"
+-> "as f hjkl", not the whole word just getting quieter.
+
 Usage:
     python disintegration_loops.py input.wav --generations 40 --loops-per-gen 3
 
@@ -29,23 +36,26 @@ def lowpass(signal, sr, cutoff_hz, order=2):
     return sosfilt(sos, signal)
 
 
-def apply_dropouts(signal, sr, decay_fraction, rng):
-    """Randomly zero out small chunks — simulates flaked-off oxide.
-    decay_fraction: 0.0 (pristine) to ~0.9 (mostly gone)."""
-    out = signal.copy()
-    n = len(signal)
-    # number and size of dropout events scale with decay_fraction
-    n_events = int(decay_fraction * (n / sr) * 8)  # ~8 potential events per second at full decay
-    for _ in range(n_events):
-        if rng.random() > decay_fraction * 1.2:
-            continue  # not every potential dropout actually happens
-        start = rng.integers(0, max(1, n - 1))
-        length = int(rng.uniform(0.002, 0.02 + decay_fraction * 0.05) * sr)
-        end = min(n, start + length)
-        # fade in/out the dropout so it's a gap, not a click
-        fade = np.hanning(max(2, end - start))
-        out[start:end] *= (1 - fade * min(1.0, decay_fraction * 1.5 + 0.2))
-    return out
+def apply_dropouts(alive_mask, n, sr, kill_fraction, rng):
+    """Permanently kill new chunks of tape - once dead, always dead.
+    Mutates alive_mask in place."""
+    samples_to_kill = int(n * kill_fraction)
+    killed = 0
+    attempts = 0
+    while killed < samples_to_kill and attempts < 250:
+        attempts += 1
+        start = int(rng.integers(0, max(1, n - 1)))
+        chunk_len = int(rng.uniform(0.01, 0.09) * sr)
+        end = min(n, start + chunk_len)
+        span = end - start
+        if span < 2 or not np.any(alive_mask[start:end] > 0.01):
+            continue
+        fade_len = min(24, max(1, span // 4))
+        ramp = np.ones(span)
+        ramp[:fade_len] = np.linspace(0, 1, fade_len)
+        ramp[-fade_len:] = np.minimum(ramp[-fade_len:], np.linspace(1, 0, fade_len))
+        alive_mask[start:end] = np.minimum(alive_mask[start:end], ramp)
+        killed += span
 
 
 def apply_wow_flutter(signal, sr, depth):
@@ -53,7 +63,6 @@ def apply_wow_flutter(signal, sr, depth):
     time warp — cheap but convincing for this purpose)."""
     n = len(signal)
     t = np.arange(n)
-    # sum of a couple of slow sine wobbles at different rates = less mechanical-sounding
     wobble = (
         np.sin(2 * np.pi * t / (sr * 3.7)) * 0.6
         + np.sin(2 * np.pi * t / (sr * 1.3)) * 0.4
@@ -64,7 +73,7 @@ def apply_wow_flutter(signal, sr, depth):
 
 
 def apply_noise_floor(signal, decay_fraction, rng):
-    noise = rng.normal(0, 0.002 + decay_fraction * 0.01, size=len(signal))
+    noise = rng.normal(0, 0.002 + decay_fraction * 0.008, size=len(signal))
     return signal + noise
 
 
@@ -79,23 +88,27 @@ def apply_saturation(signal, amount):
     return np.tanh(signal * k) / k
 
 
-def process_generation(signal, sr, gen_index, total_gens, rng):
+def process_generation(signal, alive_mask, sr, gen_index, total_gens,
+                        wear_rate, dropout_density, rng):
     """Apply one generation's worth of decay. decay_fraction ramps 0->1
     across the run, but non-linearly (early generations barely change,
-    late ones fall apart fast) since that's how the real tapes behaved."""
+    late ones fall apart fast) since that's how the real tapes behaved.
+
+    Filter/saturation/noise affect TONE only. Volume loss is purely a
+    side effect of alive_mask shrinking - there is no separate overall
+    gain fade."""
     progress = gen_index / max(1, total_gens - 1)
-    decay_fraction = progress ** 1.8  # slow start, steep end
+    decay_fraction = progress ** 1.8
 
     cutoff = 18000 * (1 - decay_fraction) + 300 * decay_fraction
     out = lowpass(signal, sr, cutoff)
     out = apply_wow_flutter(out, sr, depth=decay_fraction * 0.5)
-    out = apply_dropouts(out, sr, decay_fraction, rng)
     out = apply_saturation(out, decay_fraction)
     out = apply_noise_floor(out, decay_fraction, rng)
 
-    # overall gain fades too — tape signal genuinely weakens
-    gain = 1.0 - decay_fraction * 0.6
-    out *= gain
+    kill_fraction = 0.006 + wear_rate * dropout_density * 0.05
+    apply_dropouts(alive_mask, len(out), sr, kill_fraction, rng)
+    out = out * alive_mask
 
     return np.clip(out, -1.0, 1.0)
 
@@ -106,6 +119,8 @@ def main():
     ap.add_argument("--outdir", default="disintegration_output")
     ap.add_argument("--generations", type=int, default=30, help="Number of decay stages to render.")
     ap.add_argument("--loops-per-gen", type=int, default=2, help="How many times the loop repeats within each generation's file.")
+    ap.add_argument("--wear-rate", type=float, default=0.35, help="0-1, how fast chunks get killed per generation.")
+    ap.add_argument("--dropout-density", type=float, default=0.4, help="0-1, scales chunk-kill amount alongside wear rate.")
     ap.add_argument("--seed", type=int, default=42)
     args = ap.parse_args()
 
@@ -117,10 +132,14 @@ def main():
 
     os.makedirs(args.outdir, exist_ok=True)
     current = np.tile(signal, args.loops_per_gen)
+    alive_mask = np.ones(len(current))
     full_decay = []
 
     for gen in range(args.generations):
-        current = process_generation(current, sr, gen, args.generations, rng)
+        current = process_generation(
+            current, alive_mask, sr, gen, args.generations,
+            args.wear_rate, args.dropout_density, rng
+        )
         path = os.path.join(args.outdir, f"gen_{gen:03d}.wav")
         sf.write(path, current, sr)
         full_decay.append(current)

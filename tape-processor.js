@@ -4,6 +4,7 @@ class TapeProcessor extends AudioWorkletProcessor {
     super();
     const opts = options.processorOptions || {};
     this.buf = opts.buffer ? new Float32Array(opts.buffer) : new Float32Array(1);
+    this.aliveMask = new Float32Array(this.buf.length).fill(1);
     this.sr = opts.sampleRate || sampleRate;
     this.readPos = 0;
     this.direction = 1;
@@ -25,6 +26,7 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'freeze') this.frozen = m.value;
       else if(m.type === 'loadBuffer'){
         this.buf = new Float32Array(m.buffer);
+        this.aliveMask = m.aliveMask ? new Float32Array(m.aliveMask) : new Float32Array(this.buf.length).fill(1);
         this.readPos = this.direction === 1 ? 0 : this.buf.length-1;
         this.generation = m.generation || 0;
         this.decayFraction = m.decayFraction || 0;
@@ -34,6 +36,7 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'requestSnapshot'){
         this.port.postMessage({
           type:'snapshot', slot:m.slot, buffer:this.buf.buffer.slice(0),
+          aliveMask:this.aliveMask.buffer.slice(0),
           generation:this.generation, decayFraction:this.decayFraction
         });
       }
@@ -47,6 +50,10 @@ class TapeProcessor extends AudioWorkletProcessor {
     const n = this.buf.length;
     const p = this.params;
     const progress = Math.min(1, this.decayFraction);
+
+    // Tonal wear on the material - filter, saturation, noise. This affects
+    // TONE, not volume: it's what makes a surviving piece of tape sound
+    // more worn, not quieter.
     const cutoffMix = progress*p.highEndLoss;
     const alpha = Math.max(0.02, 1 - cutoffMix*0.85);
     let z = 0;
@@ -54,21 +61,8 @@ class TapeProcessor extends AudioWorkletProcessor {
       z = z + alpha*(this.buf[i]-z);
       this.buf[i] = z;
     }
-    const dropoutAmount = progress*p.dropoutDensity;
-    const events = Math.floor(dropoutAmount*n/this.sr*10);
-    for(let e=0;e<events;e++){
-      if(this.rand() > dropoutAmount*1.3+0.05) continue;
-      const start = Math.floor(this.rand()*n);
-      const len = Math.floor((0.002+dropoutAmount*0.05)*this.sr);
-      const end = Math.min(n, start+len);
-      for(let i=start;i<end;i++){
-        const t = (i-start)/Math.max(1,end-start);
-        const fade = Math.sin(Math.PI*t);
-        this.buf[i] *= (1 - fade*Math.min(1,dropoutAmount*1.5+0.2));
-      }
-    }
     const satAmt = progress*0.6;
-    const noiseAmt = progress*0.012;
+    const noiseAmt = progress*0.008;
     const satK = 1 + satAmt*3;
     for(let i=0;i<n;i++){
       let v = this.buf[i];
@@ -76,8 +70,35 @@ class TapeProcessor extends AudioWorkletProcessor {
       v += (this.rand()*2-1)*noiseAmt;
       this.buf[i] = v;
     }
-    const gain = 1 - progress*0.55;
-    for(let i=0;i<n;i++) this.buf[i] *= gain;
+
+    // Permanent disintegration: kill new chunks of tape for good. This is
+    // the actual "asdfghjkl -> asdf hjkl -> as f hjkl" mechanism - once a
+    // chunk is dead it stays dead. Surviving audio keeps its original
+    // level; there is no separate overall volume fade. Perceived loudness
+    // dropping over time is a side effect of less and less tape surviving,
+    // exactly like real oxide loss.
+    const killFraction = 0.006 + p.wearRate*p.dropoutDensity*0.05;
+    const samplesToKill = Math.floor(n*killFraction);
+    let killed = 0, attempts = 0;
+    while(killed < samplesToKill && attempts < 250){
+      attempts++;
+      const start = Math.floor(this.rand()*n);
+      const chunkLen = Math.floor((0.01+this.rand()*0.08)*this.sr);
+      const end = Math.min(n, start+chunkLen);
+      let anyAlive = false;
+      for(let i=start;i<end;i++){ if(this.aliveMask[i] > 0.01){ anyAlive = true; break; } }
+      if(!anyAlive) continue;
+      const fadeLen = Math.min(24, Math.floor((end-start)/4));
+      for(let i=start;i<end;i++){
+        let m = 0;
+        if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
+        else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
+        this.aliveMask[i] = Math.min(this.aliveMask[i], m);
+      }
+      killed += (end-start);
+    }
+    for(let i=0;i<n;i++) this.buf[i] *= this.aliveMask[i];
+
     this.generation += 1;
     const wear = 0.004+p.wearRate*0.02;
     this.decayFraction = Math.min(1, this.decayFraction + wear);

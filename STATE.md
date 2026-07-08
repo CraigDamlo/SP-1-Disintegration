@@ -63,6 +63,16 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       saturated noise instead of fading to silence. Fixed in all three
       places it was duplicated: tape-processor.js, the offline exporter in
       index.html, and disintegration_loops.py.
+- [x] Phase 1.2f — core redesign per Craig's feedback: removed the global
+      per-generation volume fade entirely. Decay is now driven purely by
+      a persistent "alive mask" that permanently kills small random
+      chunks each generation (never recovers) - matches the intended
+      "asdfghjkl -> asdf hjkl -> as f hjkl" model instead of an overall
+      loudness fade. Surviving audio keeps its original level; perceived
+      volume loss is a side effect of less tape surviving, not a
+      separate effect. Threaded through snapshot slots (mask persists
+      across save/load) and Quick Export. Mirrored in tape-processor.js,
+      the offline exporter in index.html, and disintegration_loops.py.
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
