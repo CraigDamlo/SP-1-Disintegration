@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP-1 :: DISINTEGRATION</title>
+<style>
+  :root{
+    --panel:#F1ECE1;
+    --panel-edge:#CFC8B4;
+    --ink:#1C1B18;
+    --ink-soft:#6B655A;
+    --accent:#FF5B0A;
+    --led-off:#D8D2C2;
+    --led-green:#3CFF8B;
+    --led-amber:#FFC93C;
+    --led-red:#FF3C3C;
+    --screen:#0D110D;
+    --screen-line:#3CFF8B;
+    --mono: ui-monospace,"SF Mono","Cascadia Mono",Menlo,Consolas,monospace;
+    --disp: "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; min-height:100vh; background:#111110;
+    display:flex; align-items:center; justify-content:center; padding:32px 16px;
+    font-family:var(--disp); color:var(--ink);
+  }
+  .device{
+    width:min(560px,100%); background:var(--panel); border:1px solid var(--panel-edge);
+    border-radius:18px; padding:22px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
+  }
+  .brand{
+    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px;
+  }
+  .brand h1{
+    font-size:15px; letter-spacing:.14em; margin:0; font-weight:700; text-transform:uppercase;
+  }
+  .brand span{ font-family:var(--mono); font-size:11px; color:var(--ink-soft); }
+
+  .leds{ display:flex; gap:5px; margin-bottom:12px; }
+  .led{ flex:1; height:8px; border-radius:2px; background:var(--led-off); transition:background .15s; }
+
+  .screen{
+    background:var(--screen); border-radius:8px; padding:12px 14px 10px;
+    margin-bottom:16px; position:relative;
+  }
+  .screen-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-family:var(--mono); font-size:11px; color:var(--screen-line); letter-spacing:.05em; }
+  canvas{ display:block; width:100%; height:70px; }
+  .condition{ font-size:12px; letter-spacing:.1em; }
+
+  .controls{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
+  .fader{ background:#fff; border:1px solid var(--panel-edge); border-radius:10px; padding:10px 8px 12px; text-align:center; }
+  .fader label{ display:block; font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:8px; min-height:22px; }
+  .fader input[type=range]{
+    writing-mode: vertical-lr; direction: rtl;
+    width:6px; height:88px; accent-color:var(--accent); margin:0 auto; display:block;
+  }
+  .fader .val{ font-family:var(--mono); font-size:10px; color:var(--ink); margin-top:8px; }
+
+  .transport{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+  button.tbtn{
+    font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
+    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:10px 6px;
+    color:var(--ink); cursor:pointer; flex:1;
+  }
+  button.tbtn:active{ transform:translateY(1px); }
+  button.tbtn.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.tbtn.fn{ background:var(--ink); border-color:var(--ink); color:var(--panel); flex:0 0 64px; }
+  button.tbtn.fn.on{ background:var(--accent); border-color:var(--accent); }
+
+  .bottom-row{ display:flex; align-items:center; gap:14px; }
+  .vol{ display:flex; align-items:center; gap:8px; flex:1; }
+  .vol label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap; }
+  .vol input{ flex:1; accent-color:var(--accent); }
+  .upload-btn{
+    font-family:var(--mono); font-size:10px; background:#fff; border:1px solid var(--panel-edge);
+    border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--ink-soft);
+  }
+  input[type=file]{ display:none; }
+
+  .hint{ margin-top:12px; font-family:var(--mono); font-size:10px; color:var(--ink-soft); text-align:center; line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="device">
+  <div class="brand">
+    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration</h1>
+    <span id="genLabel">GEN 000</span>
+  </div>
+
+  <div class="leds" id="leds"></div>
+
+  <div class="screen">
+    <div class="screen-row">
+      <span id="statusLabel">STOPPED</span>
+      <span class="condition" id="conditionLabel">PRISTINE</span>
+    </div>
+    <canvas id="wave" width="600" height="140"></canvas>
+  </div>
+
+  <div class="controls">
+    <div class="fader">
+      <label>Wear rate</label>
+      <input type="range" id="wearRate" min="0" max="100" value="35">
+      <div class="val" id="wearRateVal">35</div>
+    </div>
+    <div class="fader">
+      <label>High&#8209;end loss</label>
+      <input type="range" id="highEndLoss" min="0" max="100" value="55">
+      <div class="val" id="highEndLossVal">55</div>
+    </div>
+    <div class="fader">
+      <label>Dropout density</label>
+      <input type="range" id="dropoutDensity" min="0" max="100" value="40">
+      <div class="val" id="dropoutDensityVal">40</div>
+    </div>
+    <div class="fader">
+      <label>Wow &amp; flutter</label>
+      <input type="range" id="wowFlutter" min="0" max="100" value="25">
+      <div class="val" id="wowFlutterVal">25</div>
+    </div>
+  </div>
+
+  <div class="transport">
+    <button class="tbtn" id="fnBtn">FN</button>
+    <button class="tbtn" id="playBtn">Play</button>
+    <button class="tbtn" id="revBtn">Reverse</button>
+    <button class="tbtn" id="freezeBtn">Freeze</button>
+    <button class="tbtn" id="resetBtn">Reset tape</button>
+  </div>
+
+  <div class="bottom-row">
+    <div class="vol">
+      <label>Vol</label>
+      <input type="range" id="volume" min="0" max="100" value="70">
+    </div>
+    <button class="upload-btn" id="uploadBtn">Load your own loop&#8230;</button>
+    <input type="file" id="fileInput" accept="audio/*">
+  </div>
+
+  <div class="hint">Hold FN, then tap a fader label's button-row action &mdash; FN is a modifier for RESET (new tape) and FREEZE (halt decay, keep playing). Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
+</div>
+
+<script>
+(function(){
+  const $ = (id) => document.getElementById(id);
+  const ledsWrap = $('leds');
+  const LED_COUNT = 8;
+  for(let i=0;i<LED_COUNT;i++){
+    const d = document.createElement('div');
+    d.className='led';
+    ledsWrap.appendChild(d);
+  }
+  const ledEls = Array.from(ledsWrap.children);
+
+  const canvas = $('wave');
+  const ctx = canvas.getContext('2d');
+  function resizeCanvas(){
+    const dpr = window.devicePixelRatio||1;
+    canvas.width = canvas.clientWidth*dpr;
+    canvas.height = canvas.clientHeight*dpr;
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+  }
+  window.addEventListener('resize', resizeCanvas);
+
+  let audioCtx = null;
+  let workletNode = null;
+  let gainNode = null;
+  let pristineBuffer = null;
+  let sampleRate = 48000;
+  let playing = false;
+  let fnHeld = false;
+  let freezeOn = false;
+  let reverseOn = false;
+
+  function conditionLabel(frac){
+    if(frac < 0.08) return 'PRISTINE';
+    if(frac < 0.3) return 'WORN';
+    if(frac < 0.55) return 'FADING';
+    if(frac < 0.8) return 'DYING';
+    return 'GONE';
+  }
+
+  function updateLeds(frac){
+    const lit = Math.round(frac*LED_COUNT);
+    ledEls.forEach((el,i)=>{
+      if(i < lit){
+        el.style.background = frac < 0.5 ? 'var(--led-green)' : (frac < 0.8 ? 'var(--led-amber)' : 'var(--led-red)');
+      } else {
+        el.style.background = 'var(--led-off)';
+      }
+    });
+  }
+
+  function drawWave(preview){
+    resizeCanvas();
+    const w = canvas.clientWidth, h = canvas.clientHeight;
+    ctx.clearRect(0,0,w,h);
+    ctx.strokeStyle = '#3CFF8B';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    const n = preview.length;
+    for(let i=0;i<n;i++){
+      const x = (i/(n-1))*w;
+      const y = h/2 - preview[i]*(h/2-4);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.stroke();
+  }
+
+  function genDefaultLoop(sr, seconds){
+    const len = Math.floor(sr*seconds);
+    const buf = new Float32Array(len);
+    const freqs = [220, 277.18, 329.63, 440];
+    const amps  = [0.28, 0.2, 0.22, 0.15];
+    for(let i=0;i<len;i++){
+      const t = i/sr;
+      let s = 0;
+      for(let k=0;k<freqs.length;k++){
+        s += amps[k]*Math.sin(2*Math.PI*freqs[k]*t);
+      }
+      const fadeLen = Math.floor(sr*0.15);
+      let env = 1;
+      if(i < fadeLen) env = i/fadeLen;
+      else if(i > len-fadeLen) env = (len-i)/fadeLen;
+      buf[i] = s*env*0.6;
+    }
+    return buf;
+  }
+
+
+  function showError(msg){
+    $('statusLabel').textContent = 'ERROR';
+    $('conditionLabel').textContent = msg;
+    console.error(msg);
+  }
+
+  async function ensureAudio(){
+    if(audioCtx) return;
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+    sampleRate = audioCtx.sampleRate;
+    if(!audioCtx.audioWorklet){
+      const e = new Error('audioWorklet unavailable, likely insecure context (file:// origin)');
+      showError('NO AUDIOWORKLET - SERVE OVER HTTP, NOT FILE://');
+      e.handled = true;
+      throw e;
+    }
+    try {
+      await audioCtx.audioWorklet.addModule('tape-processor.js');
+    } catch(err){
+      showError('WORKLET.JS NOT FOUND - MUST SIT NEXT TO THE HTML, SERVED OVER HTTP');
+      err.handled = true;
+      throw err;
+    }
+    workletNode = new AudioWorkletNode(audioCtx, 'tape-processor', {
+      outputChannelCount:[2],
+      processorOptions:{ buffer: pristineBuffer.buffer.slice(0), sampleRate: sampleRate }
+    });
+    gainNode = audioCtx.createGain();
+    gainNode.gain.value = parseInt($('volume').value,10)/100;
+    workletNode.connect(gainNode).connect(audioCtx.destination);
+    workletNode.port.onmessage = (e)=>{
+      const m = e.data;
+      if(m.type === 'state'){
+        $('genLabel').textContent = 'GEN ' + String(m.generation).padStart(3,'0');
+        $('conditionLabel').textContent = conditionLabel(m.decayFraction);
+        updateLeds(m.decayFraction);
+        if(m.preview) drawWave(m.preview);
+      }
+    };
+    sendParams();
+  }
+
+  function sendParams(){
+    if(!workletNode) return;
+    workletNode.port.postMessage({ type:'params', value:{
+      wearRate: parseInt($('wearRate').value,10)/100,
+      highEndLoss: parseInt($('highEndLoss').value,10)/100,
+      dropoutDensity: parseInt($('dropoutDensity').value,10)/100,
+      wowFlutter: parseInt($('wowFlutter').value,10)/100
+    }});
+  }
+
+  ['wearRate','highEndLoss','dropoutDensity','wowFlutter'].forEach(id=>{
+    const el = $(id);
+    el.addEventListener('input', ()=>{
+      $(id+'Val').textContent = el.value;
+      sendParams();
+    });
+  });
+
+  $('volume').addEventListener('input', ()=>{
+    if(gainNode) gainNode.gain.value = parseInt($('volume').value,10)/100;
+  });
+
+  async function loadBufferIntoWorklet(buf){
+    pristineBuffer = buf;
+    if(!audioCtx){
+      await ensureAudio();
+    } else {
+      workletNode.port.postMessage({ type:'loadBuffer', buffer: buf.buffer.slice(0) });
+    }
+    $('genLabel').textContent = 'GEN 000';
+    $('conditionLabel').textContent = 'PRISTINE';
+    updateLeds(0);
+    const steps = 200, preview = new Float32Array(steps);
+    for(let i=0;i<steps;i++) preview[i] = buf[Math.floor(i/steps*buf.length)];
+    drawWave(preview);
+  }
+
+  $('playBtn').addEventListener('click', async ()=>{
+    await ensureAudio();
+    if(audioCtx.state === 'suspended') await audioCtx.resume();
+    playing = !playing;
+    $('playBtn').textContent = playing ? 'Pause' : 'Play';
+    $('playBtn').classList.toggle('on', playing);
+    $('statusLabel').textContent = playing ? 'PLAYING' : 'STOPPED';
+    workletNode.port.postMessage({ type:'play', value: playing });
+  });
+
+  $('revBtn').addEventListener('click', ()=>{
+    reverseOn = !reverseOn;
+    $('revBtn').classList.toggle('on', reverseOn);
+    if(workletNode) workletNode.port.postMessage({ type:'reverse', value: reverseOn });
+  });
+
+  $('freezeBtn').addEventListener('click', ()=>{
+    freezeOn = !freezeOn;
+    $('freezeBtn').classList.toggle('on', freezeOn);
+    if(workletNode) workletNode.port.postMessage({ type:'freeze', value: freezeOn });
+  });
+
+  $('fnBtn').addEventListener('click', ()=>{
+    fnHeld = !fnHeld;
+    $('fnBtn').classList.toggle('on', fnHeld);
+  });
+
+  $('resetBtn').addEventListener('click', async ()=>{
+    if(!pristineBuffer) return;
+    const src = window.__lastLoadedBuffer || genDefaultLoop(sampleRate, 3);
+    await loadBufferIntoWorklet(src);
+  });
+
+  $('uploadBtn').addEventListener('click', ()=> $('fileInput').click());
+  $('fileInput').addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    try {
+      await ensureAudio();
+      const arrayBuf = await file.arrayBuffer();
+      let decoded;
+      try {
+        decoded = await audioCtx.decodeAudioData(arrayBuf);
+      } catch(err){
+        showError('CANT DECODE THIS FILE - TRY WAV/MP3/M4A');
+        err.handled = true;
+        return;
+      }
+      const mono = new Float32Array(decoded.length);
+      for(let ch=0; ch<decoded.numberOfChannels; ch++){
+        const data = decoded.getChannelData(ch);
+        for(let i=0;i<decoded.length;i++) mono[i] += data[i]/decoded.numberOfChannels;
+      }
+      let max = 0;
+      for(let i=0;i<mono.length;i++) max = Math.max(max, Math.abs(mono[i]));
+      if(max > 0) for(let i=0;i<mono.length;i++) mono[i] /= max;
+      window.__lastLoadedBuffer = mono;
+      await loadBufferIntoWorklet(mono);
+      $('statusLabel').textContent = 'LOADED';
+    } catch(err){
+      if(!err.handled) showError('LOAD FAILED - SEE CONSOLE: ' + err.message);
+      console.error(err);
+    }
+  });
+
+  (async function init(){
+    resizeCanvas();
+    const def = genDefaultLoop(sampleRate, 3);
+    window.__lastLoadedBuffer = def;
+    pristineBuffer = def;
+    const steps = 200, preview = new Float32Array(steps);
+    for(let i=0;i<steps;i++) preview[i] = def[Math.floor(i/steps*def.length)];
+    drawWave(preview);
+    updateLeds(0);
+  })();
+})();
+</script>
+</body>
+</html>
