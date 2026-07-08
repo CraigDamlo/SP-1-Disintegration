@@ -23,7 +23,7 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   real risk on real hardware.
 
 ## Phase status
-- [x] Phase 0 — offline Python proof of concept (`offline/disintegration_loops.py`)
+- [x] Phase 0 — offline Python proof of concept (`disintegration_loops.py`)
 - [x] Phase 1 — browser prototype, v1 built and confirmed working.
       Repo layout is flat (no subfolders) - sp1-disintegration.html,
       tape-processor.js, disintegration_loops.py, and the launcher
@@ -42,7 +42,15 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       snapshot slots (tap load / hold save / double-tap clear, preserves
       exact generation+decay state), volume = real +/- step buttons,
       FN hold-for-power shown as a tooltip only, not wired.
-- [ ] Phase 1.2 — tuning pass: play with default decay curve, dropout
+- [x] Phase 1.2a — export: Record/Stop&save (live capture of whatever's
+      playing, downloads WAV) and Quick export (instant batch render of
+      N generations from current source + fader settings, no listening
+      required). CAVEAT: the quick-render math in `offlineMutateGeneration()`
+      duplicates `mutateBuffer()` from tape-processor.js by hand, since a
+      worklet can't be called synchronously from the main thread. If decay
+      math gets tuned in one place, it needs the same edit in the other or
+      they'll drift apart.
+- [ ] Phase 1.2b — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` based on what actually sounds good
 - [ ] Phase 1.3 — FWD/RWD rocker not yet implemented (currently just a
@@ -58,7 +66,7 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
 
 ## Next action
 Craig test-drives the updated control surface (snapshot slots, +/- volume),
-then either moves to Phase 1.2 (tuning the decay feel) or Phase 1.3 (real
+then either moves to Phase 1.2b (tuning the decay feel) or Phase 1.3 (real
 FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
