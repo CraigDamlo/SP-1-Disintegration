@@ -61,9 +61,9 @@ class TapeProcessor extends AudioWorkletProcessor {
       z = z + alpha*(this.buf[i]-z);
       this.buf[i] = z;
     }
-    const satAmt = progress*0.6;
+    const satAmt = progress*0.35;
     const noiseAmt = progress*0.008;
-    const satK = 1 + satAmt*3;
+    const satK = 1 + satAmt*2.5;
     for(let i=0;i<n;i++){
       let v = this.buf[i];
       v = Math.tanh(v*satK)/satK;

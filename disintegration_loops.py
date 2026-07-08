@@ -83,8 +83,9 @@ def apply_saturation(signal, amount):
     passages stay at unity gain — only loud peaks get compressed as
     `amount` increases. Using different multipliers here would amplify
     quiet signal on every generation and blow up into saturated noise
-    instead of fading toward silence."""
-    k = 1 + amount * 3
+    instead of fading toward silence. Capped at a mild max drive since
+    dropouts, not distortion, are meant to carry most of the decay."""
+    k = 1 + min(1.0, amount) * 2.5
     return np.tanh(signal * k) / k
 
 
@@ -103,7 +104,7 @@ def process_generation(signal, alive_mask, sr, gen_index, total_gens,
     cutoff = 18000 * (1 - decay_fraction) + 300 * decay_fraction
     out = lowpass(signal, sr, cutoff)
     out = apply_wow_flutter(out, sr, depth=decay_fraction * 0.5)
-    out = apply_saturation(out, decay_fraction)
+    out = apply_saturation(out, decay_fraction * 0.35)
     out = apply_noise_floor(out, decay_fraction, rng)
 
     kill_fraction = 0.006 + wear_rate * dropout_density * 0.05
