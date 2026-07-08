@@ -20,16 +20,17 @@ purpose so it's cheap to pick back up.
 
 ## Structure
 
+Everything lives flat in the repo root (no subfolders):
+
 ```
-prototype/
-  sp1-disintegration.html   the instrument itself
-  tape-processor.js         AudioWorklet processor (must sit next to the html)
-offline/
-  disintegration_loops.py   standalone Python version, batch-renders decay generations to WAV
-firmware/
-  (empty - Phase 3, not started)
+sp1-disintegration.html     the instrument itself
+tape-processor.js           AudioWorklet processor (must stay next to the html)
+disintegration_loops.py     standalone Python version, batch-renders decay generations to WAV
+Launch SP-1 Disintegration.applescript   double-click launcher (export as .app via Script Editor)
 STATE.md                    current project state, read this first
 ```
+
+Firmware work (Phase 3) doesn't exist yet - when it starts, it'll likely get its own subfolder.
 
 ## Running the prototype
 
@@ -37,11 +38,14 @@ The audio engine runs on an AudioWorklet, which several browsers refuse
 to load correctly from a file:// path. Serve it locally instead:
 
 ```
-cd prototype
 python3 -m http.server 8000
 ```
 
-Then open http://localhost:8000/sp1-disintegration.html
+(run from the repo root, since everything's flat) then open
+http://localhost:8000/sp1-disintegration.html
+
+Or just double-click the exported "Launch SP-1 Disintegration" app, which
+does this for you.
 
 Controls are modeled on the SP-1's physical layout: four faders (wear rate,
 high-end loss, dropout density, wow & flutter) instead of the SP-1's four
@@ -53,6 +57,9 @@ track buttons, plus play/reverse/freeze/function/reset transport and an
 ```
 python3 disintegration_loops.py my_loop.wav --generations 40
 ```
+
+Renders every decay generation as a separate WAV, plus a concatenated
+full_decay.wav covering the whole arc.
 
 Renders every decay generation as a separate WAV, plus a concatenated
 full_decay.wav covering the whole arc.

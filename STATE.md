@@ -24,10 +24,15 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`offline/disintegration_loops.py`)
-- [x] Phase 1 — browser prototype, v1 built and confirmed working
-      (`prototype/sp1-disintegration.html` + `prototype/tape-processor.js`,
-      must be served over HTTP, not opened via file://).
+- [x] Phase 1 — browser prototype, v1 built and confirmed working.
+      Repo layout is flat (no subfolders) - sp1-disintegration.html,
+      tape-processor.js, disintegration_loops.py, and the launcher
+      AppleScript all sit in the repo root together. Must be served over
+      HTTP, not opened via file://.
       AudioWorklet-based, buffer-mutation model.
+- [x] Phase 1.1a — double-click launcher: "Launch SP-1 Disintegration.applescript",
+      export as a .app via Script Editor. Starts a local server (only if
+      port 8000 isn't already in use) and opens the page.
 - [x] Phase 1.1 — full control-surface pass, based on real TE Stem user
       guide + physical unit + community repos (softmodded/marisko,
       chattock/sp1-tape-looper). Real SP-1 has: Function (GPIO), Play,
