@@ -24,26 +24,41 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`offline/disintegration_loops.py`)
-- [x] Phase 1 — browser prototype, v1 built (`prototype/sp1-disintegration.html`)
-      AudioWorklet-based, buffer-mutation model, SP-1-styled UI (4 faders,
-      play/reverse/freeze/function/reset, 8-LED meter, waveform screen).
-      NOT YET tested live / tuned by Craig.
-- [ ] Phase 1.1 — tuning pass: play with default decay curve, dropout
+- [x] Phase 1 — browser prototype, v1 built and confirmed working
+      (`prototype/sp1-disintegration.html` + `prototype/tape-processor.js`,
+      must be served over HTTP, not opened via file://).
+      AudioWorklet-based, buffer-mutation model.
+- [x] Phase 1.1 — full control-surface pass, based on real TE Stem user
+      guide + physical unit + community repos (softmodded/marisko,
+      chattock/sp1-tape-looper). Real SP-1 has: Function (GPIO), Play,
+      4 track buttons, 4 physical faders (separate from track buttons),
+      VOL +/- step buttons, FWD/RWD rocker, 8 LEDs (4 top + 4 side).
+      Implemented: 4 faders = decay params (unchanged), 4 track buttons =
+      snapshot slots (tap load / hold save / double-tap clear, preserves
+      exact generation+decay state), volume = real +/- step buttons,
+      FN hold-for-power shown as a tooltip only, not wired.
+- [ ] Phase 1.2 — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` based on what actually sounds good
+- [ ] Phase 1.3 — FWD/RWD rocker not yet implemented (currently just a
+      Reverse toggle button, not a real rocker with hold-to-scrub)
 - [ ] Phase 2 — port DSP chain to fixed-point/CMSIS-DSP-friendly C,
-      decide where "generations" physically live in the eMMC ring buffer
+      decide where "generations" physically live in the eMMC ring buffer.
+      chattock/sp1-tape-looper (Zephyr + marisko board support) is a
+      strong reference — same hardware, already solved flash-write
+      bandwidth and watchdog/recovery.
 - [ ] Phase 3 — real firmware: build against SP-1-dev toolchain, wire
       resistor-ladder buttons + Function GPIO, flash via Solderless
       web updater
 
 ## Next action
-Craig test-drives `sp1-disintegration.html` locally, reports back what
-feels wrong (too fast/slow decay, dropout character, etc.) so constants
-in `mutateBuffer()` can be tuned.
+Craig test-drives the updated control surface (snapshot slots, +/- volume),
+then either moves to Phase 1.2 (tuning the decay feel) or Phase 1.3 (real
+FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
-- Does "Reverse" on real hardware read the buffer backward, or should it
-  mean something else (e.g. slow the decay rate)?
+- Should the Reverse button become a real rocker (hold to fast-forward/
+  rewind, tap to skip) per the real hardware, or stay a simple toggle?
 - Should Freeze eventually be a hardware LED state (e.g. one LED pulses)?
-- Firmware storage layout: how much eMMC space to reserve per loop slot?
+- Firmware storage layout: how much eMMC space to reserve per loop slot,
+  and per snapshot slot?

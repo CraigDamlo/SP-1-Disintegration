@@ -49,6 +49,21 @@
   canvas{ display:block; width:100%; height:70px; }
   .condition{ font-size:12px; letter-spacing:.1em; }
 
+  .tracks{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:8px; }
+  button.trackbtn{
+    font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase;
+    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:9px 4px;
+    color:var(--ink-soft); cursor:pointer; position:relative; user-select:none;
+  }
+  button.trackbtn:active{ transform:translateY(1px); }
+  button.trackbtn .dot{
+    display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--led-off);
+    margin-right:5px; vertical-align:middle;
+  }
+  button.trackbtn.filled .dot{ background:var(--led-green); }
+  button.trackbtn.saving{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.trackbtn.saving .dot{ background:#fff; }
+
   .controls{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
   .fader{ background:#fff; border:1px solid var(--panel-edge); border-radius:10px; padding:10px 8px 12px; text-align:center; }
   .fader label{ display:block; font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:8px; min-height:22px; }
@@ -70,9 +85,14 @@
   button.tbtn.fn.on{ background:var(--accent); border-color:var(--accent); }
 
   .bottom-row{ display:flex; align-items:center; gap:14px; }
-  .vol{ display:flex; align-items:center; gap:8px; flex:1; }
-  .vol label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap; }
-  .vol input{ flex:1; accent-color:var(--accent); }
+  .vol{ display:flex; align-items:center; gap:6px; }
+  .vol label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap; margin-right:2px; }
+  button.stepbtn{
+    font-family:var(--disp); font-weight:700; font-size:13px; width:26px; height:26px; line-height:1;
+    background:#fff; border:1px solid var(--panel-edge); border-radius:6px; color:var(--ink); cursor:pointer;
+  }
+  button.stepbtn:active{ transform:translateY(1px); }
+  .vol .val{ font-family:var(--mono); font-size:10px; color:var(--ink); min-width:26px; text-align:center; }
   .upload-btn{
     font-family:var(--mono); font-size:10px; background:#fff; border:1px solid var(--panel-edge);
     border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--ink-soft);
@@ -99,6 +119,13 @@
     <canvas id="wave" width="600" height="140"></canvas>
   </div>
 
+  <div class="tracks" id="tracks">
+    <button class="trackbtn" data-slot="0"><span class="dot"></span>Slot 1</button>
+    <button class="trackbtn" data-slot="1"><span class="dot"></span>Slot 2</button>
+    <button class="trackbtn" data-slot="2"><span class="dot"></span>Slot 3</button>
+    <button class="trackbtn" data-slot="3"><span class="dot"></span>Slot 4</button>
+  </div>
+
   <div class="controls">
     <div class="fader">
       <label>Wear rate</label>
@@ -123,7 +150,7 @@
   </div>
 
   <div class="transport">
-    <button class="tbtn" id="fnBtn">FN</button>
+    <button class="tbtn" id="fnBtn" title="hold: power on/off (not wired yet)">FN</button>
     <button class="tbtn" id="playBtn">Play</button>
     <button class="tbtn" id="revBtn">Reverse</button>
     <button class="tbtn" id="freezeBtn">Freeze</button>
@@ -133,13 +160,15 @@
   <div class="bottom-row">
     <div class="vol">
       <label>Vol</label>
-      <input type="range" id="volume" min="0" max="100" value="70">
+      <button class="stepbtn" id="volDown">&minus;</button>
+      <span class="val" id="volumeVal">70</span>
+      <button class="stepbtn" id="volUp">+</button>
     </div>
     <button class="upload-btn" id="uploadBtn">Load your own loop&#8230;</button>
     <input type="file" id="fileInput" accept="audio/*">
   </div>
 
-  <div class="hint">Hold FN, then tap a fader label's button-row action &mdash; FN is a modifier for RESET (new tape) and FREEZE (halt decay, keep playing). Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
+  <div class="hint">Slots: tap to load, hold to save, double&#8209;tap to clear &mdash; snapshot the current decay state and drop back into it later. Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
 </div>
 
 <script>
@@ -173,6 +202,8 @@
   let fnHeld = false;
   let freezeOn = false;
   let reverseOn = false;
+  let volumePct = 70;
+  const slots = [null,null,null,null];
 
   function conditionLabel(frac){
     if(frac < 0.08) return 'PRISTINE';
@@ -258,7 +289,7 @@
       processorOptions:{ buffer: pristineBuffer.buffer.slice(0), sampleRate: sampleRate }
     });
     gainNode = audioCtx.createGain();
-    gainNode.gain.value = parseInt($('volume').value,10)/100;
+    gainNode.gain.value = volumePct/100;
     workletNode.connect(gainNode).connect(audioCtx.destination);
     workletNode.port.onmessage = (e)=>{
       const m = e.data;
@@ -267,6 +298,9 @@
         $('conditionLabel').textContent = conditionLabel(m.decayFraction);
         updateLeds(m.decayFraction);
         if(m.preview) drawWave(m.preview);
+      } else if(m.type === 'snapshot'){
+        slots[m.slot] = { buffer: m.buffer, generation: m.generation, decayFraction: m.decayFraction };
+        updateSlotVisuals();
       }
     };
     sendParams();
@@ -290,9 +324,71 @@
     });
   });
 
-  $('volume').addEventListener('input', ()=>{
-    if(gainNode) gainNode.gain.value = parseInt($('volume').value,10)/100;
-  });
+  function applyVolume(){
+    volumePct = Math.max(0, Math.min(100, volumePct));
+    $('volumeVal').textContent = volumePct;
+    if(gainNode) gainNode.gain.value = volumePct/100;
+  }
+  function stepVolumeHold(el, delta){
+    let repeatTimer = null, initialTimer = null;
+    const step = ()=>{ volumePct += delta; applyVolume(); };
+    el.addEventListener('pointerdown', ()=>{
+      step();
+      initialTimer = setTimeout(()=>{ repeatTimer = setInterval(step, 90); }, 400);
+    });
+    const stop = ()=>{ clearTimeout(initialTimer); clearInterval(repeatTimer); };
+    el.addEventListener('pointerup', stop);
+    el.addEventListener('pointerleave', stop);
+  }
+  stepVolumeHold($('volUp'), 5);
+  stepVolumeHold($('volDown'), -5);
+  applyVolume();
+
+  function updateSlotVisuals(){
+    document.querySelectorAll('.trackbtn').forEach(btn=>{
+      const slot = parseInt(btn.dataset.slot,10);
+      btn.classList.toggle('filled', !!slots[slot]);
+    });
+  }
+
+  function wireTrackButton(btn){
+    const slot = parseInt(btn.dataset.slot,10);
+    let downTime = 0, holdTimer = null, holdFired = false, lastTapTime = 0;
+    btn.addEventListener('pointerdown', ()=>{
+      downTime = Date.now();
+      holdFired = false;
+      holdTimer = setTimeout(async ()=>{
+        holdFired = true;
+        btn.classList.add('saving');
+        await ensureAudio();
+        workletNode.port.postMessage({ type:'requestSnapshot', slot });
+      }, 500);
+    });
+    const cancelHold = ()=>{ clearTimeout(holdTimer); btn.classList.remove('saving'); };
+    btn.addEventListener('pointerleave', cancelHold);
+    btn.addEventListener('pointerup', async ()=>{
+      clearTimeout(holdTimer);
+      btn.classList.remove('saving');
+      if(holdFired) return;
+      const now = Date.now();
+      if(now - lastTapTime < 350){
+        slots[slot] = null;
+        updateSlotVisuals();
+        lastTapTime = 0;
+        return;
+      }
+      lastTapTime = now;
+      const snap = slots[slot];
+      if(!snap) return;
+      await ensureAudio();
+      pristineBuffer = new Float32Array(snap.buffer.slice(0));
+      workletNode.port.postMessage({
+        type:'loadBuffer', buffer: snap.buffer.slice(0),
+        generation: snap.generation, decayFraction: snap.decayFraction
+      });
+    });
+  }
+  document.querySelectorAll('.trackbtn').forEach(wireTrackButton);
 
   async function loadBufferIntoWorklet(buf){
     pristineBuffer = buf;

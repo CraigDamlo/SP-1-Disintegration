@@ -26,10 +26,16 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'loadBuffer'){
         this.buf = new Float32Array(m.buffer);
         this.readPos = this.direction === 1 ? 0 : this.buf.length-1;
-        this.generation = 0;
-        this.decayFraction = 0;
+        this.generation = m.generation || 0;
+        this.decayFraction = m.decayFraction || 0;
         this.filterState = 0;
         this.postState(true);
+      }
+      else if(m.type === 'requestSnapshot'){
+        this.port.postMessage({
+          type:'snapshot', slot:m.slot, buffer:this.buf.buffer.slice(0),
+          generation:this.generation, decayFraction:this.decayFraction
+        });
       }
     };
   }
