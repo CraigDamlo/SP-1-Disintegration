@@ -23,10 +23,10 @@ purpose so it's cheap to pick back up.
 Everything lives flat in the repo root (no subfolders):
 
 ```
-sp1-disintegration.html     the instrument itself
+index.html                  the instrument itself (was sp1-disintegration.html)
 tape-processor.js           AudioWorklet processor (must stay next to the html)
 disintegration_loops.py     standalone Python version, batch-renders decay generations to WAV
-Launch SP-1 Disintegration.applescript   double-click launcher (export as .app via Script Editor)
+launch-sp1.command          double-click launcher, shows live server output, Ctrl+C to stop
 STATE.md                    current project state, read this first
 ```
 
@@ -34,18 +34,20 @@ Firmware work (Phase 3) doesn't exist yet - when it starts, it'll likely get its
 
 ## Running the prototype
 
-The audio engine runs on an AudioWorklet, which several browsers refuse
-to load correctly from a file:// path. Serve it locally instead:
+Live version (no setup needed): https://craigdamlo.github.io/SP-1-Disintegration/
+
+To run it locally instead (useful offline, or while actively editing):
+the audio engine runs on an AudioWorklet, which several browsers refuse
+to load correctly from a file:// path, so it needs to be served:
 
 ```
 python3 -m http.server 8000
 ```
 
-(run from the repo root, since everything's flat) then open
-http://localhost:8000/sp1-disintegration.html
+(run from the repo root) then open http://localhost:8000/index.html
 
-Or just double-click the exported "Launch SP-1 Disintegration" app, which
-does this for you.
+Or double-click `launch-sp1.command`, which does this for you and shows
+live server output in Terminal.
 
 Controls are modeled on the SP-1's physical layout: four faders (wear rate,
 high-end loss, dropout density, wow & flutter) instead of the SP-1's four

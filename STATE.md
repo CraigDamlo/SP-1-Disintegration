@@ -21,18 +21,15 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   resistor-ladder buttons + 1 GPIO Function button, 8 LEDs). Dev docs:
   github.com/timknapen/SP-1-dev. Unofficial/community, bricking is a
   real risk on real hardware.
+- Repo layout is flat, no subfolders: index.html, tape-processor.js,
+  disintegration_loops.py, launch-sp1.command, STATE.md, README.md all
+  sit in the repo root together.
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`disintegration_loops.py`)
-- [x] Phase 1 — browser prototype, v1 built and confirmed working.
-      Repo layout is flat (no subfolders) - sp1-disintegration.html,
-      tape-processor.js, disintegration_loops.py, and the launcher
-      AppleScript all sit in the repo root together. Must be served over
-      HTTP, not opened via file://.
-      AudioWorklet-based, buffer-mutation model.
-- [x] Phase 1.1a — double-click launcher: "Launch SP-1 Disintegration.applescript",
-      export as a .app via Script Editor. Starts a local server (only if
-      port 8000 isn't already in use) and opens the page.
+- [x] Phase 1 — browser prototype built and working. AudioWorklet-based,
+      buffer-mutation model. Main file renamed sp1-disintegration.html ->
+      `index.html` (needed for GitHub Pages, see Phase 1.2c).
 - [x] Phase 1.1 — full control-surface pass, based on real TE Stem user
       guide + physical unit + community repos (softmodded/marisko,
       chattock/sp1-tape-looper). Real SP-1 has: Function (GPIO), Play,
@@ -46,13 +43,23 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       playing, downloads WAV) and Quick export (instant batch render of
       N generations from current source + fader settings, no listening
       required). CAVEAT: the quick-render math in `offlineMutateGeneration()`
-      duplicates `mutateBuffer()` from tape-processor.js by hand, since a
-      worklet can't be called synchronously from the main thread. If decay
-      math gets tuned in one place, it needs the same edit in the other or
-      they'll drift apart.
-- [ ] Phase 1.2b — tuning pass: play with default decay curve, dropout
+      (in index.html) duplicates `mutateBuffer()` from tape-processor.js by
+      hand, since a worklet can't be called synchronously from the main
+      thread. If decay math gets tuned in one place, it needs the same edit
+      in the other or they'll drift apart.
+- [x] Phase 1.2b — local launcher: `launch-sp1.command` (double-click,
+      shows live server output in Terminal, Ctrl+C stops it cleanly).
+      Replaced the earlier AppleScript/.app version, which hid output in
+      a log file and was harder to stop - retired, no longer in the repo.
+- [x] Phase 1.2c — deployed to GitHub Pages:
+      https://craigdamlo.github.io/SP-1-Disintegration/
+      Pages serves over HTTPS, a proper secure context - this sidesteps
+      the file://-related AudioWorklet issues entirely for casual use.
+      `launch-sp1.command` is still useful for local dev while editing.
+- [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
-      `mutateBuffer()` based on what actually sounds good
+      `mutateBuffer()` (and remember to mirror any change into
+      `offlineMutateGeneration()` per the Phase 1.2a caveat)
 - [ ] Phase 1.3 — FWD/RWD rocker not yet implemented (currently just a
       Reverse toggle button, not a real rocker with hold-to-scrub)
 - [ ] Phase 2 — port DSP chain to fixed-point/CMSIS-DSP-friendly C,
@@ -65,8 +72,7 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-Craig test-drives the updated control surface (snapshot slots, +/- volume),
-then either moves to Phase 1.2b (tuning the decay feel) or Phase 1.3 (real
+Craig picks between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real
 FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
