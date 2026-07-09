@@ -149,7 +149,7 @@
 <body>
 <div class="device">
   <div class="brand">
-    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.6</span></h1>
+    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.7</span></h1>
     <span id="genLabel">GEN 000</span>
   </div>
 
@@ -457,13 +457,17 @@
     }
   });
 
-  function offlineMutateGeneration(buf, aliveMask, params, decayFraction, rng, sr){
-    const n = buf.length;
+  function offlineMutateGeneration(pristineBuf, aliveMask, params, decayFraction, rng, sr){
+    // Tone is computed FRESH from the pristine reference every generation,
+    // never cascaded from the previous generation's output - see the
+    // matching comment in tape-processor.js for why. This is what stops
+    // the runaway fade over many generations.
+    const n = pristineBuf.length;
     const cutoffMix = decayFraction*params.highEndLoss;
-    const alpha = Math.max(0.02, 1-cutoffMix*0.85);
+    const alpha = Math.max(0.05, 1-cutoffMix*0.8);
     let z = 0;
     const filtered = new Float32Array(n);
-    for(let i=0;i<n;i++){ z = z+alpha*(buf[i]-z); filtered[i]=z; }
+    for(let i=0;i<n;i++){ z = z+alpha*(pristineBuf[i]-z); filtered[i]=z; }
 
     const satAmt = decayFraction*0.35;
     const noiseAmt = decayFraction*0.008;
@@ -535,13 +539,12 @@
         wowFlutter: parseInt($('wowFlutter').value,10)/100
       };
       const rng = mulberry32(1234567);
-      let current = new Float32Array(pristineBuffer);
       let aliveMask = new Float32Array(pristineBuffer.length).fill(1);
       let decayFraction = 0;
-      const allGens = [];
-      for(let g=0; g<genCount; g++){
-        allGens.push(new Float32Array(current));
-        current = offlineMutateGeneration(current, aliveMask, params, decayFraction, rng, sampleRate);
+      const allGens = [new Float32Array(pristineBuffer)];
+      for(let g=1; g<genCount; g++){
+        const gen = offlineMutateGeneration(pristineBuffer, aliveMask, params, decayFraction, rng, sampleRate);
+        allGens.push(gen);
         decayFraction = Math.min(1, decayFraction + (0.004+params.wearRate*0.02));
       }
       const totalLen = allGens.reduce((a,c)=>a+c.length,0);

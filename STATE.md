@@ -73,6 +73,29 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       separate effect. Threaded through snapshot slots (mask persists
       across save/load) and Quick Export. Mirrored in tape-processor.js,
       the offline exporter in index.html, and disintegration_loops.py.
+- [x] Phase 1.2g — investigated report of Quick Export still sounding
+      saturated after 1.2f. Verified numerically (extracted the pure
+      function, ran it against a test tone for 30 generations) that
+      amplitude trends down, not up - the gain-growth bug is genuinely
+      gone. Most likely explanations: browser/Pages caching serving the
+      old file, and/or the saturation drive being too aggressive at max
+      decay (was up to 2.8x). Reduced max drive to 1.875x (satAmt cap
+      0.6->0.35, multiplier 3->2.5) in all three files for a gentler
+      character, since dropouts are meant to carry most of the decay.
+      NEEDS CRAIG TO CONFIRM after a hard refresh whether this resolves it.
+- [x] Phase 1.2h — v1.7, real bug found via Craig's uploaded 90-gen
+      render: tone (filter/saturation/noise) was being re-applied to the
+      already-processed buffer every generation instead of computed fresh
+      from a pristine reference each time. Cascading a mild effect 90x
+      compounds exponentially - crushed surviving audio toward silence
+      regardless of fader position, independent of chunk-loss. Verified
+      against the actual uploaded file: predicted-vs-actual RMS was off
+      by up to 7x by gen 85. Fixed in all three files by keeping a
+      separate untouched pristine reference; only the alive-mask stays
+      cumulative now. Re-verified numerically post-fix: RMS tracks within
+      a few % of pure-chunk-loss prediction at every generation up to 89.
+      CONFIRMED WORKING as of this fix - not yet re-confirmed by Craig
+      after hard refresh.
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into

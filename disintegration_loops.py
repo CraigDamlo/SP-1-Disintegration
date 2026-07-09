@@ -89,20 +89,26 @@ def apply_saturation(signal, amount):
     return np.tanh(signal * k) / k
 
 
-def process_generation(signal, alive_mask, sr, gen_index, total_gens,
+def process_generation(pristine_signal, alive_mask, sr, gen_index, total_gens,
                         wear_rate, dropout_density, rng):
     """Apply one generation's worth of decay. decay_fraction ramps 0->1
     across the run, but non-linearly (early generations barely change,
     late ones fall apart fast) since that's how the real tapes behaved.
 
-    Filter/saturation/noise affect TONE only. Volume loss is purely a
-    side effect of alive_mask shrinking - there is no separate overall
-    gain fade."""
+    Tone (filter/saturation/noise) is computed FRESH from pristine_signal
+    every generation, never cascaded from the previous generation's
+    output. Re-filtering an already-filtered signal every pass compounds
+    exponentially over many generations and crushes surviving audio
+    toward silence regardless of decay_fraction - computing from the
+    pristine reference each time bounds tonal wear to the current decay
+    fraction only, no matter how many generations have elapsed. Volume
+    loss beyond that is purely a side effect of alive_mask shrinking -
+    there is no separate overall gain fade."""
     progress = gen_index / max(1, total_gens - 1)
     decay_fraction = progress ** 1.8
 
     cutoff = 18000 * (1 - decay_fraction) + 300 * decay_fraction
-    out = lowpass(signal, sr, cutoff)
+    out = lowpass(pristine_signal, sr, cutoff)
     out = apply_wow_flutter(out, sr, depth=decay_fraction * 0.5)
     out = apply_saturation(out, decay_fraction * 0.35)
     out = apply_noise_floor(out, decay_fraction, rng)
@@ -132,13 +138,16 @@ def main():
     signal = signal / (np.max(np.abs(signal)) + 1e-9)
 
     os.makedirs(args.outdir, exist_ok=True)
-    current = np.tile(signal, args.loops_per_gen)
-    alive_mask = np.ones(len(current))
-    full_decay = []
+    pristine = np.tile(signal, args.loops_per_gen)
+    alive_mask = np.ones(len(pristine))
+    full_decay = [pristine]
 
-    for gen in range(args.generations):
+    sf.write(os.path.join(args.outdir, "gen_000.wav"), pristine, sr)
+    print(f"Rendered generation 1/{args.generations} -> {os.path.join(args.outdir, 'gen_000.wav')}")
+
+    for gen in range(1, args.generations):
         current = process_generation(
-            current, alive_mask, sr, gen, args.generations,
+            pristine, alive_mask, sr, gen, args.generations,
             args.wear_rate, args.dropout_density, rng
         )
         path = os.path.join(args.outdir, f"gen_{gen:03d}.wav")

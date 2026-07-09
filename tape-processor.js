@@ -1,12 +1,13 @@
 
-// tape-processor.js v1.6 - keep this in sync with the version-tag in index.html
-console.log('[SP-1 Disintegration] tape-processor.js v1.6 loaded');
+// tape-processor.js v1.7 - keep this in sync with the version-tag in index.html
+console.log('[SP-1 Disintegration] tape-processor.js v1.7 loaded');
 
 class TapeProcessor extends AudioWorkletProcessor {
   constructor(options){
     super();
     const opts = options.processorOptions || {};
     this.buf = opts.buffer ? new Float32Array(opts.buffer) : new Float32Array(1);
+    this.pristineBuf = this.buf.slice();
     this.aliveMask = new Float32Array(this.buf.length).fill(1);
     this.sr = opts.sampleRate || sampleRate;
     this.readPos = 0;
@@ -16,11 +17,9 @@ class TapeProcessor extends AudioWorkletProcessor {
     this.generation = 0;
     this.decayFraction = 0;
     this.params = { wearRate:0.35, highEndLoss:0.55, dropoutDensity:0.4, wowFlutter:0.25 };
-    this.filterState = 0;
     this.wobblePhase1 = 0;
     this.wobblePhase2 = 0;
     this.rngState = 12345;
-    this.previewCounter = 0;
     this.port.onmessage = (e) => {
       const m = e.data;
       if(m.type === 'params') Object.assign(this.params, m.value);
@@ -29,11 +28,16 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'freeze') this.frozen = m.value;
       else if(m.type === 'loadBuffer'){
         this.buf = new Float32Array(m.buffer);
+        // The loaded buffer becomes the new pristine reference. Tone is
+        // always computed fresh from this reference, never cascaded from
+        // whatever the buffer looked like a moment ago - so loading a
+        // saved (already-decayed) slot resumes cleanly from exactly that
+        // point rather than re-compounding on top of it.
+        this.pristineBuf = this.buf.slice();
         this.aliveMask = m.aliveMask ? new Float32Array(m.aliveMask) : new Float32Array(this.buf.length).fill(1);
         this.readPos = this.direction === 1 ? 0 : this.buf.length-1;
         this.generation = m.generation || 0;
         this.decayFraction = m.decayFraction || 0;
-        this.filterState = 0;
         this.postState(true);
       }
       else if(m.type === 'requestSnapshot'){
@@ -50,36 +54,39 @@ class TapeProcessor extends AudioWorkletProcessor {
     return this.rngState/0x7fffffff;
   }
   mutateBuffer(){
-    const n = this.buf.length;
+    const n = this.pristineBuf.length;
     const p = this.params;
     const progress = Math.min(1, this.decayFraction);
 
-    // Tonal wear on the material - filter, saturation, noise. This affects
-    // TONE, not volume: it's what makes a surviving piece of tape sound
-    // more worn, not quieter.
+    // Tone is computed FRESH from the pristine reference every generation,
+    // never from the previous generation's already-processed output. This
+    // is the fix for the runaway fade: re-filtering an already-filtered
+    // buffer every single pass compounds exponentially over many
+    // generations, crushing surviving audio toward silence regardless of
+    // fader position. Computing from pristine each time means tonal wear
+    // is bounded purely by the CURRENT decay fraction, no matter how many
+    // generations have elapsed.
     const cutoffMix = progress*p.highEndLoss;
-    const alpha = Math.max(0.02, 1 - cutoffMix*0.85);
+    const alpha = Math.max(0.05, 1 - cutoffMix*0.8);
     let z = 0;
+    const toned = new Float32Array(n);
     for(let i=0;i<n;i++){
-      z = z + alpha*(this.buf[i]-z);
-      this.buf[i] = z;
+      z = z + alpha*(this.pristineBuf[i]-z);
+      toned[i] = z;
     }
     const satAmt = progress*0.35;
     const noiseAmt = progress*0.008;
     const satK = 1 + satAmt*2.5;
     for(let i=0;i<n;i++){
-      let v = this.buf[i];
-      v = Math.tanh(v*satK)/satK;
+      let v = Math.tanh(toned[i]*satK)/satK;
       v += (this.rand()*2-1)*noiseAmt;
-      this.buf[i] = v;
+      toned[i] = v;
     }
 
     // Permanent disintegration: kill new chunks of tape for good. This is
     // the actual "asdfghjkl -> asdf hjkl -> as f hjkl" mechanism - once a
-    // chunk is dead it stays dead. Surviving audio keeps its original
-    // level; there is no separate overall volume fade. Perceived loudness
-    // dropping over time is a side effect of less and less tape surviving,
-    // exactly like real oxide loss.
+    // chunk is dead it stays dead. This is the ONLY thing that's
+    // cumulative across generations; tone above is not.
     const killFraction = 0.006 + p.wearRate*p.dropoutDensity*0.05;
     const samplesToKill = Math.floor(n*killFraction);
     let killed = 0, attempts = 0;
@@ -100,7 +107,7 @@ class TapeProcessor extends AudioWorkletProcessor {
       }
       killed += (end-start);
     }
-    for(let i=0;i<n;i++) this.buf[i] *= this.aliveMask[i];
+    for(let i=0;i<n;i++) this.buf[i] = toned[i]*this.aliveMask[i];
 
     this.generation += 1;
     const wear = 0.004+p.wearRate*0.02;
