@@ -1,14 +1,16 @@
 
-// tape-processor.js v1.7 - keep this in sync with the version-tag in index.html
-console.log('[SP-1 Disintegration] tape-processor.js v1.7 loaded');
+// tape-processor.js v1.8 - keep this in sync with the version-tag in index.html
+console.log('[SP-1 Disintegration] tape-processor.js v1.8 loaded');
 
 class TapeProcessor extends AudioWorkletProcessor {
   constructor(options){
     super();
     const opts = options.processorOptions || {};
-    this.buf = opts.buffer ? new Float32Array(opts.buffer) : new Float32Array(1);
-    this.pristineBuf = this.buf.slice();
-    this.aliveMask = new Float32Array(this.buf.length).fill(1);
+    const bL = opts.bufferL ? new Float32Array(opts.bufferL) : new Float32Array(1);
+    const bR = opts.bufferR ? new Float32Array(opts.bufferR) : new Float32Array(bL);
+    this.bufs = [bL, bR];
+    this.pristineBufs = [bL.slice(), bR.slice()];
+    this.aliveMasks = [new Float32Array(bL.length).fill(1), new Float32Array(bR.length).fill(1)];
     this.sr = opts.sampleRate || sampleRate;
     this.readPos = 0;
     this.direction = 1;
@@ -27,23 +29,28 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'reverse') this.direction = m.value ? -1 : 1;
       else if(m.type === 'freeze') this.frozen = m.value;
       else if(m.type === 'loadBuffer'){
-        this.buf = new Float32Array(m.buffer);
-        // The loaded buffer becomes the new pristine reference. Tone is
-        // always computed fresh from this reference, never cascaded from
-        // whatever the buffer looked like a moment ago - so loading a
-        // saved (already-decayed) slot resumes cleanly from exactly that
-        // point rather than re-compounding on top of it.
-        this.pristineBuf = this.buf.slice();
-        this.aliveMask = m.aliveMask ? new Float32Array(m.aliveMask) : new Float32Array(this.buf.length).fill(1);
-        this.readPos = this.direction === 1 ? 0 : this.buf.length-1;
+        const l = new Float32Array(m.bufferL);
+        const r = m.bufferR ? new Float32Array(m.bufferR) : new Float32Array(l);
+        this.bufs = [l, r];
+        // The loaded buffers become the new pristine reference. Tone is
+        // always computed fresh from this reference, never cascaded, so
+        // loading a saved (already-decayed) slot resumes cleanly rather
+        // than re-compounding on top of it.
+        this.pristineBufs = [l.slice(), r.slice()];
+        this.aliveMasks = [
+          m.aliveMaskL ? new Float32Array(m.aliveMaskL) : new Float32Array(l.length).fill(1),
+          m.aliveMaskR ? new Float32Array(m.aliveMaskR) : new Float32Array(r.length).fill(1)
+        ];
+        this.readPos = this.direction === 1 ? 0 : l.length-1;
         this.generation = m.generation || 0;
         this.decayFraction = m.decayFraction || 0;
         this.postState(true);
       }
       else if(m.type === 'requestSnapshot'){
         this.port.postMessage({
-          type:'snapshot', slot:m.slot, buffer:this.buf.buffer.slice(0),
-          aliveMask:this.aliveMask.buffer.slice(0),
+          type:'snapshot', slot:m.slot,
+          bufferL:this.bufs[0].buffer.slice(0), bufferR:this.bufs[1].buffer.slice(0),
+          aliveMaskL:this.aliveMasks[0].buffer.slice(0), aliveMaskR:this.aliveMasks[1].buffer.slice(0),
           generation:this.generation, decayFraction:this.decayFraction
         });
       }
@@ -53,25 +60,19 @@ class TapeProcessor extends AudioWorkletProcessor {
     this.rngState = (this.rngState*1103515245+12345) & 0x7fffffff;
     return this.rngState/0x7fffffff;
   }
-  mutateBuffer(){
-    const n = this.pristineBuf.length;
-    const p = this.params;
-    const progress = Math.min(1, this.decayFraction);
-
-    // Tone is computed FRESH from the pristine reference every generation,
-    // never from the previous generation's already-processed output. This
-    // is the fix for the runaway fade: re-filtering an already-filtered
-    // buffer every single pass compounds exponentially over many
-    // generations, crushing surviving audio toward silence regardless of
-    // fader position. Computing from pristine each time means tonal wear
-    // is bounded purely by the CURRENT decay fraction, no matter how many
-    // generations have elapsed.
+  // Processes ONE channel. Called separately for L and R with their own
+  // pristine reference, own alive mask, and own draws from the shared RNG
+  // stream - since each channel's kill-chunk positions are chosen from
+  // independent random draws, the two channels disintegrate differently,
+  // same as real tape where oxide doesn't flake off both tracks identically.
+  mutateChannel(pristine, aliveMask, progress, p){
+    const n = pristine.length;
     const cutoffMix = progress*p.highEndLoss;
     const alpha = Math.max(0.05, 1 - cutoffMix*0.8);
     let z = 0;
     const toned = new Float32Array(n);
     for(let i=0;i<n;i++){
-      z = z + alpha*(this.pristineBuf[i]-z);
+      z = z + alpha*(pristine[i]-z);
       toned[i] = z;
     }
     const satAmt = progress*0.35;
@@ -82,11 +83,6 @@ class TapeProcessor extends AudioWorkletProcessor {
       v += (this.rand()*2-1)*noiseAmt;
       toned[i] = v;
     }
-
-    // Permanent disintegration: kill new chunks of tape for good. This is
-    // the actual "asdfghjkl -> asdf hjkl -> as f hjkl" mechanism - once a
-    // chunk is dead it stays dead. This is the ONLY thing that's
-    // cumulative across generations; tone above is not.
     const killFraction = 0.006 + p.wearRate*p.dropoutDensity*0.05;
     const samplesToKill = Math.floor(n*killFraction);
     let killed = 0, attempts = 0;
@@ -96,44 +92,58 @@ class TapeProcessor extends AudioWorkletProcessor {
       const chunkLen = Math.floor((0.01+this.rand()*0.08)*this.sr);
       const end = Math.min(n, start+chunkLen);
       let anyAlive = false;
-      for(let i=start;i<end;i++){ if(this.aliveMask[i] > 0.01){ anyAlive = true; break; } }
+      for(let i=start;i<end;i++){ if(aliveMask[i] > 0.01){ anyAlive = true; break; } }
       if(!anyAlive) continue;
       const fadeLen = Math.min(24, Math.floor((end-start)/4));
       for(let i=start;i<end;i++){
         let m = 0;
         if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
         else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
-        this.aliveMask[i] = Math.min(this.aliveMask[i], m);
+        aliveMask[i] = Math.min(aliveMask[i], m);
       }
       killed += (end-start);
     }
-    for(let i=0;i<n;i++) this.buf[i] = toned[i]*this.aliveMask[i];
-
+    const out = new Float32Array(n);
+    for(let i=0;i<n;i++) out[i] = toned[i]*aliveMask[i];
+    return out;
+  }
+  mutateBuffer(){
+    const p = this.params;
+    const progress = Math.min(1, this.decayFraction);
+    this.bufs[0] = this.mutateChannel(this.pristineBufs[0], this.aliveMasks[0], progress, p);
+    this.bufs[1] = this.mutateChannel(this.pristineBufs[1], this.aliveMasks[1], progress, p);
     this.generation += 1;
     const wear = 0.004+p.wearRate*0.02;
     this.decayFraction = Math.min(1, this.decayFraction + wear);
     this.postState(true);
   }
   postState(withPreview){
-    let preview = null;
+    let previewL = null, previewR = null;
     if(withPreview){
       const steps = 200;
-      preview = new Float32Array(steps);
-      const n = this.buf.length;
-      for(let i=0;i<steps;i++) preview[i] = this.buf[Math.floor(i/steps*n)];
+      const n = this.bufs[0].length;
+      previewL = new Float32Array(steps);
+      previewR = new Float32Array(steps);
+      for(let i=0;i<steps;i++){
+        const idx = Math.floor(i/steps*n);
+        previewL[i] = this.bufs[0][idx];
+        previewR[i] = this.bufs[1][idx];
+      }
     }
     this.port.postMessage({
-      type:'state', generation:this.generation, decayFraction:this.decayFraction, preview: preview
+      type:'state', generation:this.generation, decayFraction:this.decayFraction,
+      previewL: previewL, previewR: previewR
     });
   }
   process(inputs, outputs){
     const out = outputs[0];
-    const n = this.buf.length;
+    const n = this.bufs[0].length;
     if(n < 2 || !this.playing){
       for(const ch of out) ch.fill(0);
       return true;
     }
     const p = this.params;
+    const bufL = this.bufs[0], bufR = this.bufs[1];
     for(let i=0;i<out[0].length;i++){
       this.wobblePhase1 += (2*Math.PI*0.27)/this.sr;
       this.wobblePhase2 += (2*Math.PI*0.77)/this.sr;
@@ -151,8 +161,8 @@ class TapeProcessor extends AudioWorkletProcessor {
       const i0 = Math.floor(this.readPos)%n;
       const i1 = (i0+1)%n;
       const frac = this.readPos - Math.floor(this.readPos);
-      const s = this.buf[i0]*(1-frac) + this.buf[i1]*frac;
-      for(const ch of out) ch[i] = s;
+      out[0][i] = bufL[i0]*(1-frac) + bufL[i1]*frac;
+      if(out.length > 1) out[1][i] = bufR[i0]*(1-frac) + bufR[i1]*frac;
     }
     return true;
   }

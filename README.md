@@ -23,7 +23,7 @@ purpose so it's cheap to pick back up.
 Everything lives flat in the repo root (no subfolders):
 
 ```
-index.html                  the instrument itself (was sp1-disintegration.html)
+index.html                  the instrument itself
 tape-processor.js           AudioWorklet processor (must stay next to the html)
 disintegration_loops.py     standalone Python version, batch-renders decay generations to WAV
 launch-sp1.command          double-click launcher, shows live server output, Ctrl+C to stop
@@ -49,10 +49,16 @@ python3 -m http.server 8000
 Or double-click `launch-sp1.command`, which does this for you and shows
 live server output in Terminal.
 
-Controls are modeled on the SP-1's physical layout: four faders (wear rate,
-high-end loss, dropout density, wow & flutter) instead of the SP-1's four
-track buttons, plus play/reverse/freeze/function/reset transport and an
-8-LED decay meter.
+Left and right channels decay independently - real tape doesn't flake
+evenly across both tracks, so the two channels lose different chunks
+over time and can end up in noticeably different states.
+
+Controls are modeled on the SP-1's physical layout: four faders (wear
+rate, high-end loss, dropout density, wow & flutter), four track buttons
+repurposed as snapshot slots (tap load / hold save / double-tap clear),
++/- volume step buttons, play/reverse/freeze/function/reset transport,
+an 8-LED decay meter, and a Record button plus a Quick Export batch
+renderer for saving what you hear as a WAV.
 
 ## Running the offline version
 
@@ -61,10 +67,8 @@ python3 disintegration_loops.py my_loop.wav --generations 40
 ```
 
 Renders every decay generation as a separate WAV, plus a concatenated
-full_decay.wav covering the whole arc.
-
-Renders every decay generation as a separate WAV, plus a concatenated
-full_decay.wav covering the whole arc.
+full_decay.wav covering the whole arc. Stereo input stays stereo, with
+each channel decaying independently, same as the browser version.
 
 ## Target hardware
 

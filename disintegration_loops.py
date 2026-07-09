@@ -15,6 +15,12 @@ its original level; the piece just has less and less tape left to
 play, exactly like real oxide loss. Think "asdfghjkl" -> "asdf hjkl"
 -> "as f hjkl", not the whole word just getting quieter.
 
+Left and right channels are processed independently, each with their
+own alive mask and their own draws from the RNG - real tape doesn't
+flake identically on both tracks, so the two channels disintegrate
+differently over the run. Mono input gets duplicated to both channels
+and diverges naturally from there.
+
 Usage:
     python disintegration_loops.py input.wav --generations 40 --loops-per-gen 3
 
@@ -89,24 +95,18 @@ def apply_saturation(signal, amount):
     return np.tanh(signal * k) / k
 
 
-def process_generation(pristine_signal, alive_mask, sr, gen_index, total_gens,
-                        wear_rate, dropout_density, rng):
-    """Apply one generation's worth of decay. decay_fraction ramps 0->1
-    across the run, but non-linearly (early generations barely change,
-    late ones fall apart fast) since that's how the real tapes behaved.
-
-    Tone (filter/saturation/noise) is computed FRESH from pristine_signal
-    every generation, never cascaded from the previous generation's
-    output. Re-filtering an already-filtered signal every pass compounds
+def process_channel(pristine_signal, alive_mask, sr, decay_fraction,
+                     wear_rate, dropout_density, rng):
+    """Apply one generation's worth of decay to ONE channel. Tone
+    (filter/saturation/noise) is computed FRESH from pristine_signal every
+    generation, never cascaded from the previous generation's output.
+    Re-filtering an already-filtered signal every pass compounds
     exponentially over many generations and crushes surviving audio
     toward silence regardless of decay_fraction - computing from the
     pristine reference each time bounds tonal wear to the current decay
     fraction only, no matter how many generations have elapsed. Volume
     loss beyond that is purely a side effect of alive_mask shrinking -
     there is no separate overall gain fade."""
-    progress = gen_index / max(1, total_gens - 1)
-    decay_fraction = progress ** 1.8
-
     cutoff = 18000 * (1 - decay_fraction) + 300 * decay_fraction
     out = lowpass(pristine_signal, sr, cutoff)
     out = apply_wow_flutter(out, sr, depth=decay_fraction * 0.5)
@@ -134,25 +134,39 @@ def main():
     rng = np.random.default_rng(args.seed)
     signal, sr = sf.read(args.input, always_2d=False)
     if signal.ndim > 1:
-        signal = signal.mean(axis=1)  # mono-sum for simplicity
-    signal = signal / (np.max(np.abs(signal)) + 1e-9)
+        left = signal[:, 0]
+        right = signal[:, 1] if signal.shape[1] > 1 else signal[:, 0]
+    else:
+        left = signal
+        right = signal.copy()
+    peak = max(np.max(np.abs(left)), np.max(np.abs(right)), 1e-9)
+    left = left / peak
+    right = right / peak
 
     os.makedirs(args.outdir, exist_ok=True)
-    pristine = np.tile(signal, args.loops_per_gen)
-    alive_mask = np.ones(len(pristine))
-    full_decay = [pristine]
+    pristine_l = np.tile(left, args.loops_per_gen)
+    pristine_r = np.tile(right, args.loops_per_gen)
+    alive_mask_l = np.ones(len(pristine_l))
+    alive_mask_r = np.ones(len(pristine_r))
+    full_decay = [np.stack([pristine_l, pristine_r], axis=1)]
+    decay_fraction = 0.0
 
-    sf.write(os.path.join(args.outdir, "gen_000.wav"), pristine, sr)
+    sf.write(os.path.join(args.outdir, "gen_000.wav"), full_decay[0], sr)
     print(f"Rendered generation 1/{args.generations} -> {os.path.join(args.outdir, 'gen_000.wav')}")
 
     for gen in range(1, args.generations):
-        current = process_generation(
-            pristine, alive_mask, sr, gen, args.generations,
-            args.wear_rate, args.dropout_density, rng
-        )
+        progress = gen / max(1, args.generations - 1)
+        decay_fraction = progress ** 1.8
+        # left drawn first, then right, from the same rng stream each
+        # generation - this is what makes the two channels diverge.
+        cur_l = process_channel(pristine_l, alive_mask_l, sr, decay_fraction,
+                                 args.wear_rate, args.dropout_density, rng)
+        cur_r = process_channel(pristine_r, alive_mask_r, sr, decay_fraction,
+                                 args.wear_rate, args.dropout_density, rng)
+        stereo = np.stack([cur_l, cur_r], axis=1)
         path = os.path.join(args.outdir, f"gen_{gen:03d}.wav")
-        sf.write(path, current, sr)
-        full_decay.append(current)
+        sf.write(path, stereo, sr)
+        full_decay.append(stereo)
         print(f"Rendered generation {gen+1}/{args.generations} -> {path}")
 
     sf.write(os.path.join(args.outdir, "full_decay.wav"), np.concatenate(full_decay), sr)

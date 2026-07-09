@@ -96,6 +96,22 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       a few % of pure-chunk-loss prediction at every generation up to 89.
       CONFIRMED WORKING as of this fix - not yet re-confirmed by Craig
       after hard refresh.
+- [x] Phase 1.2i — confirmed via Craig's re-upload that the v1.7 fix
+      worked: RMS now tracks within ~10-20% of pure chunk-loss prediction
+      (was off by 7x before). Remaining slight slope is genuine tonal
+      wear (filter/saturation), now bounded correctly - a feature, not a
+      bug.
+- [x] Phase 1.3a — v1.8: independent stereo channel decay, per Craig's
+      idea that real tape doesn't flake evenly across both tracks. L and
+      R now have separate alive masks and separate RNG draws in all three
+      files (tape-processor.js, index.html, disintegration_loops.py).
+      Verified numerically: channels' surviving-chunk overlap is well
+      below what identical decay would produce, and overall alive
+      fractions diverge too (either channel can end up more intact,
+      direction isn't fixed). Uploaded stereo files now stay stereo
+      instead of being downmixed to mono. Waveform display shows both
+      channels overlaid (R fainter) so divergence is visible.
+      NOT YET confirmed by Craig by ear.
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into

@@ -149,7 +149,7 @@
 <body>
 <div class="device">
   <div class="brand">
-    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.7</span></h1>
+    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.8</span></h1>
     <span id="genLabel">GEN 000</span>
   </div>
 
@@ -232,7 +232,7 @@
     <dt>Condition (PRISTINE / WORN / FADING / DYING / GONE)</dt>
     <dd>Plain-English read of how far along the decay is, based on the overall decay fraction.</dd>
     <dt>Waveform</dt>
-    <dd>A live snapshot of the loop's current shape, redrawn after every generation so you can watch it fall apart.</dd>
+    <dd>A live snapshot of the loop's current shape, redrawn after every generation so you can watch it fall apart. Left and right channels decay independently and are drawn overlaid (right is the fainter trace) - watch them drift apart over time, since real tape doesn't flake evenly across both tracks.</dd>
     <dt>LED meter</dt>
     <dd>Fills left to right as decay progresses. Green early, amber mid-way, red near the end.</dd>
   </dl>
@@ -317,7 +317,11 @@
   let audioCtx = null;
   let workletNode = null;
   let gainNode = null;
-  let pristineBuffer = null;
+  // Pristine source, kept as separate L/R channels so they can diverge
+  // independently as they decay - real tape doesn't flake identically on
+  // both tracks.
+  let pristineBufferL = null;
+  let pristineBufferR = null;
   let sampleRate = 48000;
   let playing = false;
   let fnHeld = false;
@@ -345,20 +349,27 @@
     });
   }
 
-  function drawWave(preview){
+  function drawWave(previewL, previewR){
     resizeCanvas();
     const w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.clearRect(0,0,w,h);
-    ctx.strokeStyle = '#3CFF8B';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    const n = preview.length;
-    for(let i=0;i<n;i++){
-      const x = (i/(n-1))*w;
-      const y = h/2 - preview[i]*(h/2-4);
-      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    function traceChannel(preview, color, alpha){
+      if(!preview) return;
+      ctx.strokeStyle = color;
+      ctx.globalAlpha = alpha;
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      const n = preview.length;
+      for(let i=0;i<n;i++){
+        const x = (i/(n-1))*w;
+        const y = h/2 - preview[i]*(h/2-4);
+        if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
+    traceChannel(previewR, '#3CFF8B', 0.45);
+    traceChannel(previewL, '#3CFF8B', 0.95);
+    ctx.globalAlpha = 1;
   }
 
   function genDefaultLoop(sr, seconds){
@@ -381,6 +392,7 @@
     return buf;
   }
 
+  const WORKLET_URL = 'tape-processor.js';
 
   function showError(msg){
     $('statusLabel').textContent = 'ERROR';
@@ -442,121 +454,6 @@
     return out;
   }
 
-  $('recBtn').addEventListener('click', async ()=>{
-    await ensureAudio();
-    recording = !recording;
-    $('recBtn').classList.toggle('active', recording);
-    $('recBtnLabel').textContent = recording ? 'Stop & save' : 'Record';
-    if(recording){
-      recChunksL = []; recChunksR = [];
-    } else {
-      const left = flattenChunks(recChunksL);
-      const right = flattenChunks(recChunksR);
-      if(left.length > 0) encodeWavAndDownload(left, right, audioCtx.sampleRate, 'sp1-disintegration-live.wav');
-      recChunksL = []; recChunksR = [];
-    }
-  });
-
-  function offlineMutateGeneration(pristineBuf, aliveMask, params, decayFraction, rng, sr){
-    // Tone is computed FRESH from the pristine reference every generation,
-    // never cascaded from the previous generation's output - see the
-    // matching comment in tape-processor.js for why. This is what stops
-    // the runaway fade over many generations.
-    const n = pristineBuf.length;
-    const cutoffMix = decayFraction*params.highEndLoss;
-    const alpha = Math.max(0.05, 1-cutoffMix*0.8);
-    let z = 0;
-    const filtered = new Float32Array(n);
-    for(let i=0;i<n;i++){ z = z+alpha*(pristineBuf[i]-z); filtered[i]=z; }
-
-    const satAmt = decayFraction*0.35;
-    const noiseAmt = decayFraction*0.008;
-    const satK = 1 + satAmt*2.5;
-    const toned = new Float32Array(n);
-    for(let i=0;i<n;i++){
-      let v = Math.tanh(filtered[i]*satK)/satK;
-      v += (rng()*2-1)*noiseAmt;
-      toned[i] = v;
-    }
-
-    // permanent chunk-killing, same logic and same aliveMask array as the
-    // live worklet - once dead, stays dead, no separate volume fade
-    const killFraction = 0.006 + params.wearRate*params.dropoutDensity*0.05;
-    const samplesToKill = Math.floor(n*killFraction);
-    let killed = 0, attempts = 0;
-    while(killed < samplesToKill && attempts < 250){
-      attempts++;
-      const start = Math.floor(rng()*n);
-      const chunkLen = Math.floor((0.01+rng()*0.08)*sr);
-      const end = Math.min(n, start+chunkLen);
-      let anyAlive = false;
-      for(let i=start;i<end;i++){ if(aliveMask[i] > 0.01){ anyAlive = true; break; } }
-      if(!anyAlive) continue;
-      const fadeLen = Math.min(24, Math.floor((end-start)/4));
-      for(let i=start;i<end;i++){
-        let m = 0;
-        if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
-        else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
-        aliveMask[i] = Math.min(aliveMask[i], m);
-      }
-      killed += (end-start);
-    }
-
-    const wobbleDepth = decayFraction*params.wowFlutter;
-    const out = new Float32Array(n);
-    for(let i=0;i<n;i++){
-      const wobble = Math.sin(2*Math.PI*i/(sr*3.7))*0.6 + Math.sin(2*Math.PI*i/(sr*1.3))*0.4;
-      let srcPos = i + wobble*wobbleDepth*(sr/100);
-      srcPos = Math.max(0, Math.min(n-1, srcPos));
-      const i0 = Math.floor(srcPos), i1 = Math.min(n-1,i0+1), frac = srcPos-i0;
-      const warpedSample = toned[i0]*(1-frac)+toned[i1]*frac;
-      out[i] = warpedSample*aliveMask[i];
-    }
-    return out;
-  }
-
-  function mulberry32(seed){
-    return function(){
-      seed |= 0; seed = (seed+0x6D2B79F5)|0;
-      let t = Math.imul(seed^(seed>>>15), 1|seed);
-      t = (t+Math.imul(t^(t>>>7), 61|t))^t;
-      return ((t^(t>>>14))>>>0)/4294967296;
-    };
-  }
-
-  $('renderBtn').addEventListener('click', ()=>{
-    if(!pristineBuffer) return;
-    const genCount = Math.max(1, Math.min(200, parseInt($('renderGens').value,10)||30));
-    const btn = $('renderBtn');
-    btn.disabled = true;
-    const origLabel = btn.textContent;
-    btn.textContent = 'Rendering...';
-    setTimeout(()=>{
-      const params = {
-        wearRate: parseInt($('wearRate').value,10)/100,
-        highEndLoss: parseInt($('highEndLoss').value,10)/100,
-        dropoutDensity: parseInt($('dropoutDensity').value,10)/100,
-        wowFlutter: parseInt($('wowFlutter').value,10)/100
-      };
-      const rng = mulberry32(1234567);
-      let aliveMask = new Float32Array(pristineBuffer.length).fill(1);
-      let decayFraction = 0;
-      const allGens = [new Float32Array(pristineBuffer)];
-      for(let g=1; g<genCount; g++){
-        const gen = offlineMutateGeneration(pristineBuffer, aliveMask, params, decayFraction, rng, sampleRate);
-        allGens.push(gen);
-        decayFraction = Math.min(1, decayFraction + (0.004+params.wearRate*0.02));
-      }
-      const totalLen = allGens.reduce((a,c)=>a+c.length,0);
-      const flat = new Float32Array(totalLen);
-      let o=0;
-      for(const g of allGens){ flat.set(g,o); o+=g.length; }
-      encodeWavAndDownload(flat, flat, sampleRate, 'sp1-disintegration-render.wav');
-      btn.disabled = false;
-      btn.textContent = origLabel;
-    }, 20);
-  });
-
   async function ensureAudio(){
     if(audioCtx) return;
     audioCtx = new (window.AudioContext||window.webkitAudioContext)();
@@ -568,7 +465,7 @@
       throw e;
     }
     try {
-      await audioCtx.audioWorklet.addModule('tape-processor.js');
+      await audioCtx.audioWorklet.addModule(WORKLET_URL);
     } catch(err){
       showError('WORKLET.JS NOT FOUND - MUST SIT NEXT TO THE HTML, SERVED OVER HTTP');
       err.handled = true;
@@ -576,7 +473,11 @@
     }
     workletNode = new AudioWorkletNode(audioCtx, 'tape-processor', {
       outputChannelCount:[2],
-      processorOptions:{ buffer: pristineBuffer.buffer.slice(0), sampleRate: sampleRate }
+      processorOptions:{
+        bufferL: pristineBufferL.buffer.slice(0),
+        bufferR: pristineBufferR.buffer.slice(0),
+        sampleRate: sampleRate
+      }
     });
     gainNode = audioCtx.createGain();
     gainNode.gain.value = volumePct/100;
@@ -588,9 +489,13 @@
         $('genLabel').textContent = 'GEN ' + String(m.generation).padStart(3,'0');
         $('conditionLabel').textContent = conditionLabel(m.decayFraction);
         updateLeds(m.decayFraction);
-        if(m.preview) drawWave(m.preview);
+        if(m.previewL) drawWave(m.previewL, m.previewR);
       } else if(m.type === 'snapshot'){
-        slots[m.slot] = { buffer: m.buffer, aliveMask: m.aliveMask, generation: m.generation, decayFraction: m.decayFraction };
+        slots[m.slot] = {
+          bufferL: m.bufferL, bufferR: m.bufferR,
+          aliveMaskL: m.aliveMaskL, aliveMaskR: m.aliveMaskR,
+          generation: m.generation, decayFraction: m.decayFraction
+        };
         updateSlotVisuals();
       }
     };
@@ -644,9 +549,8 @@
 
   function wireTrackButton(btn){
     const slot = parseInt(btn.dataset.slot,10);
-    let downTime = 0, holdTimer = null, holdFired = false, lastTapTime = 0;
+    let holdTimer = null, holdFired = false, lastTapTime = 0;
     btn.addEventListener('pointerdown', ()=>{
-      downTime = Date.now();
       holdFired = false;
       holdTimer = setTimeout(async ()=>{
         holdFired = true;
@@ -672,29 +576,37 @@
       const snap = slots[slot];
       if(!snap) return;
       await ensureAudio();
-      pristineBuffer = new Float32Array(snap.buffer.slice(0));
+      pristineBufferL = new Float32Array(snap.bufferL.slice(0));
+      pristineBufferR = new Float32Array(snap.bufferR.slice(0));
       workletNode.port.postMessage({
-        type:'loadBuffer', buffer: snap.buffer.slice(0),
-        aliveMask: snap.aliveMask ? snap.aliveMask.slice(0) : null,
+        type:'loadBuffer', bufferL: snap.bufferL.slice(0), bufferR: snap.bufferR.slice(0),
+        aliveMaskL: snap.aliveMaskL ? snap.aliveMaskL.slice(0) : null,
+        aliveMaskR: snap.aliveMaskR ? snap.aliveMaskR.slice(0) : null,
         generation: snap.generation, decayFraction: snap.decayFraction
       });
     });
   }
   document.querySelectorAll('.trackbtn').forEach(wireTrackButton);
 
-  async function loadBufferIntoWorklet(buf){
-    pristineBuffer = buf;
+  async function loadBufferIntoWorklet(bufL, bufR){
+    pristineBufferL = bufL;
+    pristineBufferR = bufR;
     if(!audioCtx){
       await ensureAudio();
     } else {
-      workletNode.port.postMessage({ type:'loadBuffer', buffer: buf.buffer.slice(0) });
+      workletNode.port.postMessage({
+        type:'loadBuffer', bufferL: bufL.buffer.slice(0), bufferR: bufR.buffer.slice(0)
+      });
     }
     $('genLabel').textContent = 'GEN 000';
     $('conditionLabel').textContent = 'PRISTINE';
     updateLeds(0);
-    const steps = 200, preview = new Float32Array(steps);
-    for(let i=0;i<steps;i++) preview[i] = buf[Math.floor(i/steps*buf.length)];
-    drawWave(preview);
+    const steps = 200, previewL = new Float32Array(steps), previewR = new Float32Array(steps);
+    for(let i=0;i<steps;i++){
+      previewL[i] = bufL[Math.floor(i/steps*bufL.length)];
+      previewR[i] = bufR[Math.floor(i/steps*bufR.length)];
+    }
+    drawWave(previewL, previewR);
   }
 
   $('playBtn').addEventListener('click', async ()=>{
@@ -725,9 +637,11 @@
   });
 
   $('resetBtn').addEventListener('click', async ()=>{
-    if(!pristineBuffer) return;
-    const src = window.__lastLoadedBuffer || genDefaultLoop(sampleRate, 3);
-    await loadBufferIntoWorklet(src);
+    if(!pristineBufferL) return;
+    const src = window.__lastLoadedBuffer || { L: genDefaultLoop(sampleRate, 3) };
+    const L = src.L;
+    const R = src.R || new Float32Array(L);
+    await loadBufferIntoWorklet(L, R);
   });
 
   $('uploadBtn').addEventListener('click', ()=> $('fileInput').click());
@@ -745,16 +659,23 @@
         err.handled = true;
         return;
       }
-      const mono = new Float32Array(decoded.length);
-      for(let ch=0; ch<decoded.numberOfChannels; ch++){
-        const data = decoded.getChannelData(ch);
-        for(let i=0;i<decoded.length;i++) mono[i] += data[i]/decoded.numberOfChannels;
+      // Keep channels separate instead of downmixing - mono files get
+      // duplicated to both channels (they'll diverge naturally as they
+      // decay), true stereo files keep their real L/R content.
+      const n = decoded.length;
+      let L = new Float32Array(n), R = new Float32Array(n);
+      if(decoded.numberOfChannels >= 2){
+        L.set(decoded.getChannelData(0));
+        R.set(decoded.getChannelData(1));
+      } else {
+        L.set(decoded.getChannelData(0));
+        R.set(decoded.getChannelData(0));
       }
       let max = 0;
-      for(let i=0;i<mono.length;i++) max = Math.max(max, Math.abs(mono[i]));
-      if(max > 0) for(let i=0;i<mono.length;i++) mono[i] /= max;
-      window.__lastLoadedBuffer = mono;
-      await loadBufferIntoWorklet(mono);
+      for(let i=0;i<n;i++){ max = Math.max(max, Math.abs(L[i]), Math.abs(R[i])); }
+      if(max > 0){ for(let i=0;i<n;i++){ L[i]/=max; R[i]/=max; } }
+      window.__lastLoadedBuffer = { L, R };
+      await loadBufferIntoWorklet(L, R);
       $('statusLabel').textContent = 'LOADED';
     } catch(err){
       if(!err.handled) showError('LOAD FAILED - SEE CONSOLE: ' + err.message);
@@ -762,14 +683,140 @@
     }
   });
 
+  function offlineMutateChannel(pristine, aliveMask, params, decayFraction, rng, sr){
+    // Tone is computed FRESH from the pristine reference every generation,
+    // never cascaded from the previous generation's output - see the
+    // matching comment in tape-processor.js for why.
+    const n = pristine.length;
+    const cutoffMix = decayFraction*params.highEndLoss;
+    const alpha = Math.max(0.05, 1-cutoffMix*0.8);
+    let z = 0;
+    const filtered = new Float32Array(n);
+    for(let i=0;i<n;i++){ z = z+alpha*(pristine[i]-z); filtered[i]=z; }
+
+    const satAmt = decayFraction*0.35;
+    const noiseAmt = decayFraction*0.008;
+    const satK = 1 + satAmt*2.5;
+    const toned = new Float32Array(n);
+    for(let i=0;i<n;i++){
+      let v = Math.tanh(filtered[i]*satK)/satK;
+      v += (rng()*2-1)*noiseAmt;
+      toned[i] = v;
+    }
+
+    const killFraction = 0.006 + params.wearRate*params.dropoutDensity*0.05;
+    const samplesToKill = Math.floor(n*killFraction);
+    let killed = 0, attempts = 0;
+    while(killed < samplesToKill && attempts < 250){
+      attempts++;
+      const start = Math.floor(rng()*n);
+      const chunkLen = Math.floor((0.01+rng()*0.08)*sr);
+      const end = Math.min(n, start+chunkLen);
+      let anyAlive = false;
+      for(let i=start;i<end;i++){ if(aliveMask[i] > 0.01){ anyAlive = true; break; } }
+      if(!anyAlive) continue;
+      const fadeLen = Math.min(24, Math.floor((end-start)/4));
+      for(let i=start;i<end;i++){
+        let m = 0;
+        if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
+        else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
+        aliveMask[i] = Math.min(aliveMask[i], m);
+      }
+      killed += (end-start);
+    }
+
+    const wobbleDepth = decayFraction*params.wowFlutter;
+    const out = new Float32Array(n);
+    for(let i=0;i<n;i++){
+      const wobble = Math.sin(2*Math.PI*i/(sr*3.7))*0.6 + Math.sin(2*Math.PI*i/(sr*1.3))*0.4;
+      let srcPos = i + wobble*wobbleDepth*(sr/100);
+      srcPos = Math.max(0, Math.min(n-1, srcPos));
+      const i0 = Math.floor(srcPos), i1 = Math.min(n-1,i0+1), frac = srcPos-i0;
+      const warpedSample = toned[i0]*(1-frac)+toned[i1]*frac;
+      out[i] = warpedSample*aliveMask[i];
+    }
+    return out;
+  }
+
+  function mulberry32(seed){
+    return function(){
+      seed |= 0; seed = (seed+0x6D2B79F5)|0;
+      let t = Math.imul(seed^(seed>>>15), 1|seed);
+      t = (t+Math.imul(t^(t>>>7), 61|t))^t;
+      return ((t^(t>>>14))>>>0)/4294967296;
+    };
+  }
+
+  $('renderBtn').addEventListener('click', ()=>{
+    if(!pristineBufferL) return;
+    const genCount = Math.max(1, Math.min(200, parseInt($('renderGens').value,10)||30));
+    const btn = $('renderBtn');
+    btn.disabled = true;
+    const origLabel = btn.textContent;
+    btn.textContent = 'Rendering...';
+    setTimeout(()=>{
+      const params = {
+        wearRate: parseInt($('wearRate').value,10)/100,
+        highEndLoss: parseInt($('highEndLoss').value,10)/100,
+        dropoutDensity: parseInt($('dropoutDensity').value,10)/100,
+        wowFlutter: parseInt($('wowFlutter').value,10)/100
+      };
+      const rng = mulberry32(1234567);
+      let aliveMaskL = new Float32Array(pristineBufferL.length).fill(1);
+      let aliveMaskR = new Float32Array(pristineBufferR.length).fill(1);
+      let decayFraction = 0;
+      const allGensL = [new Float32Array(pristineBufferL)];
+      const allGensR = [new Float32Array(pristineBufferR)];
+      for(let g=1; g<genCount; g++){
+        // L drawn first, then R, from the same rng stream each generation -
+        // this is what makes the two channels diverge independently.
+        const genL = offlineMutateChannel(pristineBufferL, aliveMaskL, params, decayFraction, rng, sampleRate);
+        const genR = offlineMutateChannel(pristineBufferR, aliveMaskR, params, decayFraction, rng, sampleRate);
+        allGensL.push(genL);
+        allGensR.push(genR);
+        decayFraction = Math.min(1, decayFraction + (0.004+params.wearRate*0.02));
+      }
+      const totalLen = allGensL.reduce((a,c)=>a+c.length,0);
+      const flatL = new Float32Array(totalLen);
+      const flatR = new Float32Array(totalLen);
+      let o=0;
+      for(let g=0; g<allGensL.length; g++){
+        flatL.set(allGensL[g],o); flatR.set(allGensR[g],o); o+=allGensL[g].length;
+      }
+      encodeWavAndDownload(flatL, flatR, sampleRate, 'sp1-disintegration-render.wav');
+      btn.disabled = false;
+      btn.textContent = origLabel;
+    }, 20);
+  });
+
+  $('recBtn').addEventListener('click', async ()=>{
+    await ensureAudio();
+    recording = !recording;
+    $('recBtn').classList.toggle('active', recording);
+    $('recBtnLabel').textContent = recording ? 'Stop & save' : 'Record';
+    if(recording){
+      recChunksL = []; recChunksR = [];
+    } else {
+      const left = flattenChunks(recChunksL);
+      const right = flattenChunks(recChunksR);
+      if(left.length > 0) encodeWavAndDownload(left, right, audioCtx.sampleRate, 'sp1-disintegration-live.wav');
+      recChunksL = []; recChunksR = [];
+    }
+  });
+
   (async function init(){
     resizeCanvas();
-    const def = genDefaultLoop(sampleRate, 3);
-    window.__lastLoadedBuffer = def;
-    pristineBuffer = def;
-    const steps = 200, preview = new Float32Array(steps);
-    for(let i=0;i<steps;i++) preview[i] = def[Math.floor(i/steps*def.length)];
-    drawWave(preview);
+    const defL = genDefaultLoop(sampleRate, 3);
+    const defR = new Float32Array(defL);
+    window.__lastLoadedBuffer = { L: defL, R: defR };
+    pristineBufferL = defL;
+    pristineBufferR = defR;
+    const steps = 200, previewL = new Float32Array(steps), previewR = new Float32Array(steps);
+    for(let i=0;i<steps;i++){
+      previewL[i] = defL[Math.floor(i/steps*defL.length)];
+      previewR[i] = defR[Math.floor(i/steps*defR.length)];
+    }
+    drawWave(previewL, previewR);
     updateLeds(0);
   })();
 })();
