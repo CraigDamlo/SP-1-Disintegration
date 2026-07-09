@@ -6,12 +6,20 @@
 <title>SP-1 :: DISINTEGRATION</title>
 <style>
   :root{
-    --panel:#F1ECE1;
-    --panel-edge:#CFC8B4;
-    --ink:#1C1B18;
-    --ink-soft:#6B655A;
-    --accent:#FF5B0A;
-    --led-off:#D8D2C2;
+    /* Body colors matched to the physical SP-1: warm taupe/mauve main
+       panel, tan/copper side strip carrying Play + Function, near-black
+       control faces, maroon play/record accent. */
+    --panel:#8F8277;
+    --panel-edge:#766A5F;
+    --strip:#C7A467;
+    --strip-edge:#A9854E;
+    --face:#2A2723;
+    --face-edge:#141210;
+    --ink:#EFE9DD;
+    --ink-on-light:#211E1B;
+    --ink-soft:#B9AE9E;
+    --accent:#A23327;
+    --led-off:#5B5147;
     --led-green:#3CFF8B;
     --led-amber:#FFC93C;
     --led-red:#FF3C3C;
@@ -27,37 +35,112 @@
     font-family:var(--disp); color:var(--ink);
   }
   .device{
-    width:min(560px,100%); background:var(--panel); border:1px solid var(--panel-edge);
-    border-radius:18px; padding:22px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.4);
+    width:min(560px,100%); display:grid;
+    grid-template-columns:1fr 64px;
+    grid-template-rows:auto auto auto auto auto auto auto auto auto;
+    row-gap:16px;
+    border-radius:18px; overflow:hidden; border:1px solid var(--panel-edge);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.08);
   }
+  .main-panel{
+    grid-column:1; grid-row:1/-1; min-width:0; background:var(--panel); padding:22px;
+    display:grid; grid-template-rows:subgrid; grid-template-columns:1fr;
+  }
+  .side-strip{
+    grid-column:2; grid-row:1/-1; background:var(--strip); border-left:1px solid var(--strip-edge);
+    padding:22px 10px;
+    display:grid; grid-template-rows:subgrid; grid-template-columns:1fr;
+  }
+  .side-strip .strip-item{
+    display:flex; flex-direction:column; align-items:center; gap:4px; align-self:center;
+  }
+  .side-strip .strip-label{
+    font-family:var(--mono); font-size:8px; letter-spacing:.1em; color:rgba(33,30,27,.55);
+    text-transform:uppercase; text-align:center;
+  }
+  button.stripbtn{
+    width:44px; aspect-ratio:1; background:var(--face); border:1px solid var(--face-edge);
+    border-radius:8px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:var(--ink); padding:0;
+  }
+  button.stripbtn:active{ transform:translateY(1px); }
+  button.stripbtn.on{ background:var(--accent); border-color:var(--accent); }
+  .stripbtn .tri{
+    width:0; height:0; border-top:7px solid transparent; border-bottom:7px solid transparent;
+    border-left:11px solid #C0392B;
+  }
+  .stripbtn.play.on .tri{ border-left-color:#fff; }
+  .stripbtn .fn-dots{ font-family:var(--mono); font-size:14px; letter-spacing:2px; color:var(--ink); }
+  button.extrabtn{
+    width:100%; font-family:var(--mono); font-size:8px; letter-spacing:.04em; text-transform:uppercase;
+    background:transparent; border:1px solid rgba(33,30,27,.35); border-radius:6px; padding:6px 2px;
+    color:rgba(33,30,27,.75); cursor:pointer; line-height:1.3;
+  }
+  button.extrabtn.on{ background:rgba(33,30,27,.75); color:var(--strip); border-color:rgba(33,30,27,.75); }
+
   .brand{
-    display:flex; justify-content:space-between; align-items:baseline; margin-bottom:14px;
+    display:flex; justify-content:space-between; align-items:baseline;
   }
   .brand h1{
     font-size:15px; letter-spacing:.14em; margin:0; font-weight:700; text-transform:uppercase;
+    color:var(--ink);
   }
   .version-tag{
     font-family:var(--mono); font-size:9px; letter-spacing:0; color:var(--ink-soft);
     text-transform:none; font-weight:400; vertical-align:middle; margin-left:4px;
-    background:var(--panel-dark); padding:2px 5px; border-radius:4px;
+    background:rgba(0,0,0,.2); padding:2px 5px; border-radius:4px;
   }
   .brand span{ font-family:var(--mono); font-size:11px; color:var(--ink-soft); }
 
-  .leds{ display:flex; gap:5px; margin-bottom:12px; }
+  .leds{ display:flex; gap:5px; }
   .led{ flex:1; height:8px; border-radius:2px; background:var(--led-off); transition:background .15s; }
 
+  /* Screen + rocker share a row: rocker sits right next to the waveform,
+     rotated so it rocks up/down (matching how it reads on the physical
+     unit) rather than left/right. */
+  .screen-block{ display:flex; align-items:stretch; gap:10px; }
   .screen{
-    background:var(--screen); border-radius:8px; padding:12px 14px 10px;
-    margin-bottom:16px; position:relative;
+    flex:1; background:var(--screen); border-radius:8px; padding:12px 14px 10px;
+    position:relative;
   }
   .screen-row{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-family:var(--mono); font-size:11px; color:var(--screen-line); letter-spacing:.05em; }
   canvas{ display:block; width:100%; height:70px; }
   .condition{ font-size:12px; letter-spacing:.1em; }
 
-  .tracks{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:8px; }
+  button.rocker{
+    flex:0 0 30px; background:var(--face); border:1px solid var(--face-edge); border-radius:8px;
+    color:var(--ink); cursor:pointer; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; gap:4px; font-size:11px; line-height:1;
+  }
+  button.rocker.on{ background:var(--accent); border-color:var(--accent); }
+  button.rocker:active{ transform:translateY(1px); }
+
+  /* Volume sits at the top of the main panel, same as the real unit's
+     +/- buttons above the faders. */
+  .vol-row{ display:flex; align-items:center; gap:6px; }
+  .vol-row label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap; margin-right:2px; }
+  button.stepbtn{
+    font-family:var(--disp); font-weight:700; font-size:13px; width:26px; height:26px; line-height:1;
+    background:var(--face); border:1px solid var(--face-edge); border-radius:6px; color:var(--ink); cursor:pointer;
+  }
+  button.stepbtn:active{ transform:translateY(1px); }
+  .vol-row .val{ font-family:var(--mono); font-size:10px; color:var(--ink-on-light); min-width:26px; text-align:center; }
+
+  .controls{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  .fader{ background:var(--face); border:1px solid var(--face-edge); border-radius:10px; padding:10px 8px 12px; text-align:center; }
+  .fader label{ display:block; font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:8px; min-height:22px; }
+  .fader input[type=range]{
+    writing-mode: vertical-lr; direction: rtl;
+    width:6px; height:88px; accent-color:var(--ink-soft); margin:0 auto; display:block;
+  }
+  .fader .val{ font-family:var(--mono); font-size:10px; color:var(--ink); margin-top:8px; }
+
+  /* Track buttons: solo stems, hold for FX, one directly below each
+     fader (same 4-column grid, no offset, so columns line up). */
+  .tracks{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
   button.trackbtn{
     font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase;
-    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:9px 4px;
+    background:var(--face); border:1px solid var(--face-edge); border-radius:8px; padding:9px 4px;
     color:var(--ink-soft); cursor:pointer; position:relative; user-select:none;
   }
   button.trackbtn:active{ transform:translateY(1px); }
@@ -69,45 +152,26 @@
   button.trackbtn.saving{ background:var(--accent); border-color:var(--accent); color:#fff; }
   button.trackbtn.saving .dot{ background:#fff; }
 
-  .controls{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:16px; }
-  .fader{ background:#fff; border:1px solid var(--panel-edge); border-radius:10px; padding:10px 8px 12px; text-align:center; }
-  .fader label{ display:block; font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; margin-bottom:8px; min-height:22px; }
-  .fader input[type=range]{
-    writing-mode: vertical-lr; direction: rtl;
-    width:6px; height:88px; accent-color:var(--accent); margin:0 auto; display:block;
+  /* Freeze / Reset tape / Load loop are our own additions with no
+     hardware equivalent, so they're styled as a visually secondary,
+     outline-only row rather than matching the real control faces. */
+  .extras-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
+  .extras-row .extras-label{
+    font-family:var(--mono); font-size:8px; letter-spacing:.08em; color:var(--ink-soft);
+    text-transform:uppercase; width:100%; opacity:.7; margin-bottom:2px;
   }
-  .fader .val{ font-family:var(--mono); font-size:10px; color:var(--ink); margin-top:8px; }
-
-  .transport{ display:flex; align-items:center; gap:8px; margin-bottom:12px; }
-  button.tbtn{
-    font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
-    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:10px 6px;
-    color:var(--ink); cursor:pointer; flex:1;
+  button.extraghost{
+    font-family:var(--mono); font-size:10px; letter-spacing:.03em; text-transform:uppercase;
+    background:transparent; border:1px dashed var(--panel-edge); border-radius:8px; padding:8px 10px;
+    color:var(--ink-soft); cursor:pointer; flex:1;
   }
-  button.tbtn:active{ transform:translateY(1px); }
-  button.tbtn.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.tbtn.fn{ background:var(--ink); border-color:var(--ink); color:var(--panel); flex:0 0 64px; }
-  button.tbtn.fn.on{ background:var(--accent); border-color:var(--accent); }
-
-  .bottom-row{ display:flex; align-items:center; gap:14px; }
-  .vol{ display:flex; align-items:center; gap:6px; }
-  .vol label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; white-space:nowrap; margin-right:2px; }
-  button.stepbtn{
-    font-family:var(--disp); font-weight:700; font-size:13px; width:26px; height:26px; line-height:1;
-    background:#fff; border:1px solid var(--panel-edge); border-radius:6px; color:var(--ink); cursor:pointer;
-  }
-  button.stepbtn:active{ transform:translateY(1px); }
-  .vol .val{ font-family:var(--mono); font-size:10px; color:var(--ink); min-width:26px; text-align:center; }
-  .upload-btn{
-    font-family:var(--mono); font-size:10px; background:#fff; border:1px solid var(--panel-edge);
-    border-radius:8px; padding:8px 10px; cursor:pointer; color:var(--ink-soft);
-  }
+  button.extraghost.on{ background:rgba(0,0,0,.25); border-style:solid; color:var(--ink); }
   input[type=file]{ display:none; }
 
   .export-row{ display:flex; align-items:center; gap:10px; margin-top:12px; flex-wrap:wrap; }
   button.recbtn{
     font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
-    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:9px 12px;
+    background:var(--face); border:1px solid var(--face-edge); border-radius:8px; padding:9px 12px;
     color:var(--ink); cursor:pointer; display:flex; align-items:center; gap:6px;
   }
   button.recbtn .dot{ width:8px; height:8px; border-radius:50%; background:var(--led-red); opacity:.35; }
@@ -117,12 +181,12 @@
   .export-row .divider{ width:1px; align-self:stretch; background:var(--panel-edge); }
   .export-row label{ font-size:9.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase; }
   .export-row input[type=number]{
-    width:48px; font-family:var(--mono); font-size:11px; border:1px solid var(--panel-edge);
-    border-radius:6px; padding:6px; background:#fff; color:var(--ink);
+    width:48px; font-family:var(--mono); font-size:11px; border:1px solid var(--face-edge);
+    border-radius:6px; padding:6px; background:var(--face); color:var(--ink);
   }
   button.renderbtn{
     font-family:var(--disp); font-weight:700; font-size:11px; letter-spacing:.06em; text-transform:uppercase;
-    background:#fff; border:1px solid var(--panel-edge); border-radius:8px; padding:9px 12px;
+    background:var(--face); border:1px solid var(--face-edge); border-radius:8px; padding:9px 12px;
     color:var(--ink); cursor:pointer;
   }
   button.renderbtn:disabled{ opacity:.5; cursor:default; }
@@ -148,80 +212,102 @@
 </head>
 <body>
 <div class="device">
-  <div class="brand">
-    <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.8</span></h1>
-    <span id="genLabel">GEN 000</span>
-  </div>
-
-  <div class="leds" id="leds"></div>
-
-  <div class="screen">
-    <div class="screen-row">
-      <span id="statusLabel">STOPPED</span>
-      <span class="condition" id="conditionLabel">PRISTINE</span>
+  <div class="main-panel">
+    <div class="brand">
+      <h1>SP&#8209;1 &nbsp;/&nbsp; Disintegration <span class="version-tag" id="versionTag">v1.8</span></h1>
+      <span id="genLabel">GEN 000</span>
     </div>
-    <canvas id="wave" width="600" height="140"></canvas>
-  </div>
 
-  <div class="tracks" id="tracks">
-    <button class="trackbtn" data-slot="0"><span class="dot"></span>Slot 1</button>
-    <button class="trackbtn" data-slot="1"><span class="dot"></span>Slot 2</button>
-    <button class="trackbtn" data-slot="2"><span class="dot"></span>Slot 3</button>
-    <button class="trackbtn" data-slot="3"><span class="dot"></span>Slot 4</button>
-  </div>
+    <div class="leds" id="leds"></div>
 
-  <div class="controls">
-    <div class="fader">
-      <label>Wear rate</label>
-      <input type="range" id="wearRate" min="0" max="100" value="35">
-      <div class="val" id="wearRateVal">35</div>
+    <!-- Screen + rocker: rocker sits right next to the waveform, now
+         rocking up/down instead of left/right. -->
+    <div class="screen-block">
+      <button class="rocker" id="revBtn" title="Rocker (repurposed as Reverse)">
+        <span>&#9650;</span><span>&#9660;</span>
+      </button>
+      <div class="screen">
+        <div class="screen-row">
+          <span id="statusLabel">STOPPED</span>
+          <span class="condition" id="conditionLabel">PRISTINE</span>
+        </div>
+        <canvas id="wave" width="600" height="140"></canvas>
+      </div>
     </div>
-    <div class="fader">
-      <label>High&#8209;end loss</label>
-      <input type="range" id="highEndLoss" min="0" max="100" value="55">
-      <div class="val" id="highEndLossVal">55</div>
-    </div>
-    <div class="fader">
-      <label>Dropout density</label>
-      <input type="range" id="dropoutDensity" min="0" max="100" value="40">
-      <div class="val" id="dropoutDensityVal">40</div>
-    </div>
-    <div class="fader">
-      <label>Wow &amp; flutter</label>
-      <input type="range" id="wowFlutter" min="0" max="100" value="25">
-      <div class="val" id="wowFlutterVal">25</div>
-    </div>
-  </div>
 
-  <div class="transport">
-    <button class="tbtn" id="fnBtn" title="hold: power on/off (not wired yet)">FN</button>
-    <button class="tbtn" id="playBtn">Play</button>
-    <button class="tbtn" id="revBtn">Reverse</button>
-    <button class="tbtn" id="freezeBtn">Freeze</button>
-    <button class="tbtn" id="resetBtn">Reset tape</button>
-  </div>
-
-  <div class="bottom-row">
-    <div class="vol">
+    <!-- Volume: top of the panel, above the faders, same as the real unit. -->
+    <div class="vol-row">
       <label>Vol</label>
       <button class="stepbtn" id="volDown">&minus;</button>
       <span class="val" id="volumeVal">70</span>
       <button class="stepbtn" id="volUp">+</button>
     </div>
-    <button class="upload-btn" id="uploadBtn">Load your own loop&#8230;</button>
-    <input type="file" id="fileInput" accept="audio/*">
+
+    <div class="controls">
+      <div class="fader">
+        <label>Wear rate</label>
+        <input type="range" id="wearRate" min="0" max="100" value="35">
+        <div class="val" id="wearRateVal">35</div>
+      </div>
+      <div class="fader">
+        <label>High&#8209;end loss</label>
+        <input type="range" id="highEndLoss" min="0" max="100" value="55">
+        <div class="val" id="highEndLossVal">55</div>
+      </div>
+      <div class="fader">
+        <label>Dropout density</label>
+        <input type="range" id="dropoutDensity" min="0" max="100" value="40">
+        <div class="val" id="dropoutDensityVal">40</div>
+      </div>
+      <div class="fader">
+        <label>Wow &amp; flutter</label>
+        <input type="range" id="wowFlutter" min="0" max="100" value="25">
+        <div class="val" id="wowFlutterVal">25</div>
+      </div>
+    </div>
+
+    <div class="tracks" id="tracks">
+      <button class="trackbtn" data-slot="0"><span class="dot"></span>Slot 1</button>
+      <button class="trackbtn" data-slot="1"><span class="dot"></span>Slot 2</button>
+      <button class="trackbtn" data-slot="2"><span class="dot"></span>Slot 3</button>
+      <button class="trackbtn" data-slot="3"><span class="dot"></span>Slot 4</button>
+    </div>
+
+    <!-- Software-only extras with no hardware equivalent - kept visually
+         secondary (dashed outline) rather than styled like real controls. -->
+    <div class="extras-row">
+      <span class="extras-label">Extras (no hardware equivalent)</span>
+      <button class="extraghost" id="freezeBtn">Freeze</button>
+      <button class="extraghost" id="resetBtn">Reset tape</button>
+      <button class="extraghost" id="uploadBtn">Load your own loop&#8230;</button>
+      <input type="file" id="fileInput" accept="audio/*">
+    </div>
+
+    <div class="export-row">
+      <button class="recbtn" id="recBtn"><span class="dot"></span><span id="recBtnLabel">Record</span></button>
+      <div class="divider"></div>
+      <label>Render</label>
+      <input type="number" id="renderGens" min="1" max="200" value="30">
+      <label>gens</label>
+      <button class="renderbtn" id="renderBtn">Quick export&#8230;</button>
+    </div>
+
+    <div class="hint">Slots: tap to load, hold to save, double&#8209;tap to clear &mdash; snapshot the current decay state and drop back into it later. Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
   </div>
 
-  <div class="export-row">
-    <button class="recbtn" id="recBtn"><span class="dot"></span><span id="recBtnLabel">Record</span></button>
-    <div class="divider"></div>
-    <label>Render</label>
-    <input type="number" id="renderGens" min="1" max="200" value="30">
-    <label>gens</label>
-    <button class="renderbtn" id="renderBtn">Quick export&#8230;</button>
+  <!-- Side strip: Play/Pause + Function, matching the real unit's
+       separate tan/copper column on the right edge. Pinned to specific
+       subgrid rows so they line up with matching main-panel rows. -->
+  <div class="side-strip">
+    <div class="strip-item" style="grid-row:3;">
+      <span class="strip-label">Play</span>
+      <button class="stripbtn play" id="playBtn"><span class="tri"></span></button>
+    </div>
+    <div class="strip-item" style="grid-row:6;">
+      <span class="strip-label">Fn</span>
+      <button class="stripbtn" id="fnBtn" title="hold: power on/off (not wired yet)"><span class="fn-dots">&#8942;</span></button>
+    </div>
   </div>
-
-  <div class="hint">Slots: tap to load, hold to save, double&#8209;tap to clear &mdash; snapshot the current decay state and drop back into it later. Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
 </div>
 
 <div class="guide">
@@ -249,38 +335,42 @@
     <dd>Pitch instability that grows as the loop decays &mdash; the wobble/seasick quality of worn tape.</dd>
   </dl>
 
-  <h2>Slots (the four buttons above the faders)</h2>
+  <h2>Slots (the four track buttons below the faders)</h2>
   <dl>
     <dt>Tap</dt>
     <dd>Load that slot, restoring its buffer at the exact generation and decay state it was saved at &mdash; not reset to pristine.</dd>
     <dt>Hold (~0.5s)</dt>
-    <dd>Save the current buffer, whatever state it's in, into that slot. The button flashes orange while saving.</dd>
+    <dd>Save the current buffer, whatever state it's in, into that slot. The button flashes maroon while saving.</dd>
     <dt>Double-tap</dt>
     <dd>Clear that slot.</dd>
     <dt>Lit dot</dt>
     <dd>Indicates the slot currently has something saved in it.</dd>
   </dl>
 
-  <h2>Transport</h2>
+  <h2>Side strip &amp; rocker</h2>
   <dl>
-    <dt>FN</dt>
-    <dd>Currently a visual-only shift key. Hovering shows a note about a hold-for-power gesture on the real hardware, but it isn't wired up here yet.</dd>
-    <dt>Play / Pause</dt>
+    <dt>Play / Pause (side strip)</dt>
     <dd>Starts or stops playback. The first press also spins up the audio engine.</dd>
-    <dt>Reverse</dt>
-    <dd>Flips which direction the playhead reads through the buffer.</dd>
+    <dt>Fn (side strip)</dt>
+    <dd>Currently a visual-only shift key. Hovering shows a note about a hold-for-power gesture on the real hardware, but it isn't wired up here yet.</dd>
+    <dt>Rocker</dt>
+    <dd>On the real unit this skips tracks and, held with Fn, scrubs playback. Here it's repurposed as Reverse: flips which direction the playhead reads through the buffer.</dd>
+  </dl>
+
+  <h2>Extras (no hardware equivalent)</h2>
+  <dl>
     <dt>Freeze</dt>
     <dd>Stops further decay while playback keeps running, so you can sit on whatever generation you've reached.</dd>
     <dt>Reset tape</dt>
     <dd>Reloads the last source you started from (the default pad, or your uploaded file) fresh at generation 0.</dd>
-  </dl>
-
-  <h2>Volume &amp; loading</h2>
-  <dl>
-    <dt>Vol &minus; / +</dt>
-    <dd>Steps master volume by 5%. Hold either button to repeat.</dd>
     <dt>Load your own loop&#8230;</dt>
     <dd>Upload any audio file. It's downmixed to mono, normalized, and becomes the new pristine source tape.</dd>
+  </dl>
+
+  <h2>Volume</h2>
+  <dl>
+    <dt>Vol &minus; / +</dt>
+    <dd>Steps master volume by 5%. Hold either button to repeat. Positioned at the top of the panel, matching the real unit.</dd>
   </dl>
 
   <h2>Export</h2>
@@ -613,8 +703,8 @@
     await ensureAudio();
     if(audioCtx.state === 'suspended') await audioCtx.resume();
     playing = !playing;
-    $('playBtn').textContent = playing ? 'Pause' : 'Play';
     $('playBtn').classList.toggle('on', playing);
+    $('playBtn').title = playing ? 'Pause' : 'Play';
     $('statusLabel').textContent = playing ? 'PLAYING' : 'STOPPED';
     workletNode.port.postMessage({ type:'play', value: playing });
   });
