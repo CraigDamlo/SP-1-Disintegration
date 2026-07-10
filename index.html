@@ -135,26 +135,26 @@
   }
   .fader .val{ font-family:var(--mono); font-size:10px; color:var(--ink); margin-top:8px; }
 
-  /* Track buttons: solo stems, hold for FX, one directly below each
-     fader (same 4-column grid, no offset, so columns line up). */
-  .tracks{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
-  button.trackbtn{
+  /* Freeze, Reset tape, Bake, Stutter: one button below each fader (same
+     4-column grid, no offset, so columns line up). These replace the old
+     save-slot concept with genuinely useful momentary/toggle controls. */
+  .actions{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+  button.actionbtn{
     font-family:var(--mono); font-size:10px; letter-spacing:.05em; text-transform:uppercase;
     background:var(--face); border:1px solid var(--face-edge); border-radius:8px; padding:9px 4px;
     color:var(--ink-soft); cursor:pointer; position:relative; user-select:none;
   }
-  button.trackbtn:active{ transform:translateY(1px); }
-  button.trackbtn .dot{
+  button.actionbtn:active{ transform:translateY(1px); }
+  button.actionbtn .dot{
     display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--led-off);
     margin-right:5px; vertical-align:middle;
   }
-  button.trackbtn.filled .dot{ background:var(--led-green); }
-  button.trackbtn.saving{ background:var(--accent); border-color:var(--accent); color:#fff; }
-  button.trackbtn.saving .dot{ background:#fff; }
+  button.actionbtn.on{ background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.actionbtn.on .dot{ background:#fff; }
 
-  /* Freeze / Reset tape / Load loop are our own additions with no
-     hardware equivalent, so they're styled as a visually secondary,
-     outline-only row rather than matching the real control faces. */
+  /* Load-your-own-loop is our own addition with no hardware equivalent,
+     kept visually secondary (dashed outline) rather than matching the
+     real control faces. */
   .extras-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
   .extras-row .extras-label{
     font-family:var(--mono); font-size:8px; letter-spacing:.08em; color:var(--ink-soft);
@@ -266,19 +266,17 @@
       </div>
     </div>
 
-    <div class="tracks" id="tracks">
-      <button class="trackbtn" data-slot="0"><span class="dot"></span>Slot 1</button>
-      <button class="trackbtn" data-slot="1"><span class="dot"></span>Slot 2</button>
-      <button class="trackbtn" data-slot="2"><span class="dot"></span>Slot 3</button>
-      <button class="trackbtn" data-slot="3"><span class="dot"></span>Slot 4</button>
+    <div class="actions" id="actions">
+      <button class="actionbtn" id="stutterBtn"><span class="dot"></span>Stutter</button>
+      <button class="actionbtn" id="freezeBtn"><span class="dot"></span>Freeze</button>
+      <button class="actionbtn" id="bakeBtn"><span class="dot"></span>Bake</button>
+      <button class="actionbtn" id="resetBtn"><span class="dot"></span>Reset tape</button>
     </div>
 
-    <!-- Software-only extras with no hardware equivalent - kept visually
-         secondary (dashed outline) rather than styled like real controls. -->
+    <!-- Load-your-own-loop is our own addition with no hardware
+         equivalent - kept visually secondary (dashed outline). -->
     <div class="extras-row">
       <span class="extras-label">Extras (no hardware equivalent)</span>
-      <button class="extraghost" id="freezeBtn">Freeze</button>
-      <button class="extraghost" id="resetBtn">Reset tape</button>
       <button class="extraghost" id="uploadBtn">Load your own loop&#8230;</button>
       <input type="file" id="fileInput" accept="audio/*">
     </div>
@@ -292,7 +290,7 @@
       <button class="renderbtn" id="renderBtn">Quick export&#8230;</button>
     </div>
 
-    <div class="hint">Slots: tap to load, hold to save, double&#8209;tap to clear &mdash; snapshot the current decay state and drop back into it later. Decay mutates the stored loop itself each time it passes the playhead, same as tape.</div>
+    <div class="hint">Freeze pauses further decay. Reset reloads the source fresh. Bake temporarily blends dropped-out audio back in, at the cost of faster decay for a few seconds after you let go. Stutter repeats a tiny slice at the playhead while held, then resumes right where it left off.</div>
   </div>
 
   <!-- Side strip: Play/Pause + Function, matching the real unit's
@@ -335,17 +333,18 @@
     <dd>Pitch instability that grows as the loop decays &mdash; the wobble/seasick quality of worn tape.</dd>
   </dl>
 
-  <h2>Slots (the four track buttons below the faders)</h2>
+  <h2>Actions (the four buttons below the faders)</h2>
   <dl>
-    <dt>Tap</dt>
-    <dd>Load that slot, restoring its buffer at the exact generation and decay state it was saved at &mdash; not reset to pristine.</dd>
-    <dt>Hold (~0.5s)</dt>
-    <dd>Save the current buffer, whatever state it's in, into that slot. The button flashes maroon while saving.</dd>
-    <dt>Double-tap</dt>
-    <dd>Clear that slot.</dd>
-    <dt>Lit dot</dt>
-    <dd>Indicates the slot currently has something saved in it.</dd>
+    <dt>Stutter (hold)</dt>
+    <dd>Grabs a ~120ms slice at the current playhead position and repeats it rapidly. Release to resume normal playback exactly where it paused &mdash; a real-time glitch toy with no lasting effect on the tape.</dd>
+    <dt>Freeze (toggle)</dt>
+    <dd>Stops further decay while playback keeps running, so you can sit on whatever generation you've reached.</dd>
+    <dt>Bake (hold)</dt>
+    <dd>Temporarily blends dropped-out audio back in, like literally baking a sticky-shed tape to make it playable one more time. Release and it snaps back to the true decay state, plus a short burst of accelerated wear &mdash; the relief was borrowed, not free.</dd>
+    <dt>Reset tape (tap)</dt>
+    <dd>Reloads the last source you started from (the default pad, or your uploaded file) fresh at generation 0.</dd>
   </dl>
+  <p style="font-family:var(--mono); font-size:10px; color:var(--ink-soft);">These occupy the same physical position as the real unit's four track buttons (which solo stems on the actual hardware) &mdash; repurposed here since this instrument works on one loop rather than four stems.</p>
 
   <h2>Side strip &amp; rocker</h2>
   <dl>
@@ -359,10 +358,6 @@
 
   <h2>Extras (no hardware equivalent)</h2>
   <dl>
-    <dt>Freeze</dt>
-    <dd>Stops further decay while playback keeps running, so you can sit on whatever generation you've reached.</dd>
-    <dt>Reset tape</dt>
-    <dd>Reloads the last source you started from (the default pad, or your uploaded file) fresh at generation 0.</dd>
     <dt>Load your own loop&#8230;</dt>
     <dd>Upload any audio file. It's downmixed to mono, normalized, and becomes the new pristine source tape.</dd>
   </dl>
@@ -418,7 +413,6 @@
   let freezeOn = false;
   let reverseOn = false;
   let volumePct = 70;
-  const slots = [null,null,null,null];
 
   function conditionLabel(frac){
     if(frac < 0.08) return 'PRISTINE';
@@ -580,13 +574,6 @@
         $('conditionLabel').textContent = conditionLabel(m.decayFraction);
         updateLeds(m.decayFraction);
         if(m.previewL) drawWave(m.previewL, m.previewR);
-      } else if(m.type === 'snapshot'){
-        slots[m.slot] = {
-          bufferL: m.bufferL, bufferR: m.bufferR,
-          aliveMaskL: m.aliveMaskL, aliveMaskR: m.aliveMaskR,
-          generation: m.generation, decayFraction: m.decayFraction
-        };
-        updateSlotVisuals();
       }
     };
     sendParams();
@@ -630,53 +617,32 @@
   stepVolumeHold($('volDown'), -5);
   applyVolume();
 
-  function updateSlotVisuals(){
-    document.querySelectorAll('.trackbtn').forEach(btn=>{
-      const slot = parseInt(btn.dataset.slot,10);
-      btn.classList.toggle('filled', !!slots[slot]);
-    });
-  }
-
-  function wireTrackButton(btn){
-    const slot = parseInt(btn.dataset.slot,10);
-    let holdTimer = null, holdFired = false, lastTapTime = 0;
-    btn.addEventListener('pointerdown', ()=>{
-      holdFired = false;
-      holdTimer = setTimeout(async ()=>{
-        holdFired = true;
-        btn.classList.add('saving');
-        await ensureAudio();
-        workletNode.port.postMessage({ type:'requestSnapshot', slot });
-      }, 500);
-    });
-    const cancelHold = ()=>{ clearTimeout(holdTimer); btn.classList.remove('saving'); };
-    btn.addEventListener('pointerleave', cancelHold);
-    btn.addEventListener('pointerup', async ()=>{
-      clearTimeout(holdTimer);
-      btn.classList.remove('saving');
-      if(holdFired) return;
-      const now = Date.now();
-      if(now - lastTapTime < 350){
-        slots[slot] = null;
-        updateSlotVisuals();
-        lastTapTime = 0;
-        return;
-      }
-      lastTapTime = now;
-      const snap = slots[slot];
-      if(!snap) return;
+  // Bake and Stutter are hold-to-activate: press and hold to engage,
+  // release to disengage. Both just forward the held state straight to
+  // the worklet, which owns all the actual DSP behavior.
+  function wireHoldAction(btn, msgType){
+    let held = false;
+    const start = async (e)=>{
+      e.preventDefault();
+      if(held) return;
+      held = true;
+      btn.classList.add('on');
       await ensureAudio();
-      pristineBufferL = new Float32Array(snap.bufferL.slice(0));
-      pristineBufferR = new Float32Array(snap.bufferR.slice(0));
-      workletNode.port.postMessage({
-        type:'loadBuffer', bufferL: snap.bufferL.slice(0), bufferR: snap.bufferR.slice(0),
-        aliveMaskL: snap.aliveMaskL ? snap.aliveMaskL.slice(0) : null,
-        aliveMaskR: snap.aliveMaskR ? snap.aliveMaskR.slice(0) : null,
-        generation: snap.generation, decayFraction: snap.decayFraction
-      });
-    });
+      workletNode.port.postMessage({ type:msgType, value:true });
+    };
+    const end = ()=>{
+      if(!held) return;
+      held = false;
+      btn.classList.remove('on');
+      if(workletNode) workletNode.port.postMessage({ type:msgType, value:false });
+    };
+    btn.addEventListener('pointerdown', start);
+    btn.addEventListener('pointerup', end);
+    btn.addEventListener('pointerleave', end);
+    btn.addEventListener('pointercancel', end);
   }
-  document.querySelectorAll('.trackbtn').forEach(wireTrackButton);
+  wireHoldAction($('bakeBtn'), 'bake');
+  wireHoldAction($('stutterBtn'), 'stutter');
 
   async function loadBufferIntoWorklet(bufL, bufR){
     pristineBufferL = bufL;

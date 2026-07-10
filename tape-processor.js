@@ -1,6 +1,6 @@
 
-// tape-processor.js v1.8 - keep this in sync with the version-tag in index.html
-console.log('[SP-1 Disintegration] tape-processor.js v1.8 loaded');
+// tape-processor.js v1.9 - keep this in sync with the version-tag in index.html
+console.log('[SP-1 Disintegration] tape-processor.js v1.9 loaded');
 
 class TapeProcessor extends AudioWorkletProcessor {
   constructor(options){
@@ -16,6 +16,12 @@ class TapeProcessor extends AudioWorkletProcessor {
     this.direction = 1;
     this.playing = false;
     this.frozen = false;
+    this.baking = false;
+    this.bakePenaltySamplesLeft = 0;
+    this.stuttering = false;
+    this.stutterAnchor = 0;
+    this.stutterPos = 0;
+    this.stutterChunkLen = 1;
     this.generation = 0;
     this.decayFraction = 0;
     this.params = { wearRate:0.35, highEndLoss:0.55, dropoutDensity:0.4, wowFlutter:0.25 };
@@ -28,6 +34,33 @@ class TapeProcessor extends AudioWorkletProcessor {
       else if(m.type === 'play') this.playing = m.value;
       else if(m.type === 'reverse') this.direction = m.value ? -1 : 1;
       else if(m.type === 'freeze') this.frozen = m.value;
+      else if(m.type === 'bake'){
+        // Bake temporarily blends dropped-out audio back in (a nod to
+        // literally baking sticky-shed tape to make it playable one more
+        // time), rendered instantly so it's audible right away rather
+        // than waiting for the loop to wrap. Releasing it snaps back to
+        // the true current decay state and leaves a short wear penalty -
+        // the relief was borrowed, not free.
+        this.baking = m.value;
+        if(this.baking){
+          this.renderPreview(0.6);
+        } else {
+          this.bakePenaltySamplesLeft = Math.floor(this.sr*4);
+          this.renderPreview(0);
+        }
+      }
+      else if(m.type === 'stutter'){
+        // Stutter freezes the real playhead in place (no decay progress
+        // while held) and repeats a short slice at that position; on
+        // release playback resumes exactly where it paused, so no part
+        // of the loop is skipped.
+        this.stuttering = m.value;
+        if(this.stuttering){
+          this.stutterAnchor = this.readPos;
+          this.stutterChunkLen = Math.max(1, Math.floor(this.sr*0.12));
+          this.stutterPos = 0;
+        }
+      }
       else if(m.type === 'loadBuffer'){
         const l = new Float32Array(m.bufferL);
         const r = m.bufferR ? new Float32Array(m.bufferR) : new Float32Array(l);
@@ -46,14 +79,6 @@ class TapeProcessor extends AudioWorkletProcessor {
         this.decayFraction = m.decayFraction || 0;
         this.postState(true);
       }
-      else if(m.type === 'requestSnapshot'){
-        this.port.postMessage({
-          type:'snapshot', slot:m.slot,
-          bufferL:this.bufs[0].buffer.slice(0), bufferR:this.bufs[1].buffer.slice(0),
-          aliveMaskL:this.aliveMasks[0].buffer.slice(0), aliveMaskR:this.aliveMasks[1].buffer.slice(0),
-          generation:this.generation, decayFraction:this.decayFraction
-        });
-      }
     };
   }
   rand(){
@@ -65,9 +90,10 @@ class TapeProcessor extends AudioWorkletProcessor {
   // stream - since each channel's kill-chunk positions are chosen from
   // independent random draws, the two channels disintegrate differently,
   // same as real tape where oxide doesn't flake off both tracks identically.
-  mutateChannel(pristine, aliveMask, progress, p){
+  mutateChannel(pristine, aliveMask, progress, p, doKill, relief){
     const n = pristine.length;
-    const cutoffMix = progress*p.highEndLoss;
+    const reliefProgress = progress*(1-relief*0.6);
+    const cutoffMix = reliefProgress*p.highEndLoss;
     const alpha = Math.max(0.05, 1 - cutoffMix*0.8);
     let z = 0;
     const toned = new Float32Array(n);
@@ -75,46 +101,64 @@ class TapeProcessor extends AudioWorkletProcessor {
       z = z + alpha*(pristine[i]-z);
       toned[i] = z;
     }
-    const satAmt = progress*0.35;
-    const noiseAmt = progress*0.008;
+    const satAmt = reliefProgress*0.35;
+    const noiseAmt = reliefProgress*0.008;
     const satK = 1 + satAmt*2.5;
     for(let i=0;i<n;i++){
       let v = Math.tanh(toned[i]*satK)/satK;
       v += (this.rand()*2-1)*noiseAmt;
       toned[i] = v;
     }
-    const killFraction = 0.006 + p.wearRate*p.dropoutDensity*0.05;
-    const samplesToKill = Math.floor(n*killFraction);
-    let killed = 0, attempts = 0;
-    while(killed < samplesToKill && attempts < 250){
-      attempts++;
-      const start = Math.floor(this.rand()*n);
-      const chunkLen = Math.floor((0.01+this.rand()*0.08)*this.sr);
-      const end = Math.min(n, start+chunkLen);
-      let anyAlive = false;
-      for(let i=start;i<end;i++){ if(aliveMask[i] > 0.01){ anyAlive = true; break; } }
-      if(!anyAlive) continue;
-      const fadeLen = Math.min(24, Math.floor((end-start)/4));
-      for(let i=start;i<end;i++){
-        let m = 0;
-        if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
-        else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
-        aliveMask[i] = Math.min(aliveMask[i], m);
+    if(doKill){
+      const killFraction = 0.006 + p.wearRate*p.dropoutDensity*0.05;
+      const samplesToKill = Math.floor(n*killFraction);
+      let killed = 0, attempts = 0;
+      while(killed < samplesToKill && attempts < 250){
+        attempts++;
+        const start = Math.floor(this.rand()*n);
+        const chunkLen = Math.floor((0.01+this.rand()*0.08)*this.sr);
+        const end = Math.min(n, start+chunkLen);
+        let anyAlive = false;
+        for(let i=start;i<end;i++){ if(aliveMask[i] > 0.01){ anyAlive = true; break; } }
+        if(!anyAlive) continue;
+        const fadeLen = Math.min(24, Math.floor((end-start)/4));
+        for(let i=start;i<end;i++){
+          let m = 0;
+          if(i-start < fadeLen) m = 1-(i-start)/Math.max(1,fadeLen);
+          else if(end-i < fadeLen) m = 1-(end-i)/Math.max(1,fadeLen);
+          aliveMask[i] = Math.min(aliveMask[i], m);
+        }
+        killed += (end-start);
       }
-      killed += (end-start);
     }
     const out = new Float32Array(n);
-    for(let i=0;i<n;i++) out[i] = toned[i]*aliveMask[i];
+    for(let i=0;i<n;i++){
+      let mask = aliveMask[i];
+      if(relief > 0) mask = Math.min(1, mask + relief*(1-mask));
+      out[i] = toned[i]*mask;
+    }
     return out;
   }
   mutateBuffer(){
     const p = this.params;
     const progress = Math.min(1, this.decayFraction);
-    this.bufs[0] = this.mutateChannel(this.pristineBufs[0], this.aliveMasks[0], progress, p);
-    this.bufs[1] = this.mutateChannel(this.pristineBufs[1], this.aliveMasks[1], progress, p);
+    const relief = this.baking ? 0.6 : 0;
+    this.bufs[0] = this.mutateChannel(this.pristineBufs[0], this.aliveMasks[0], progress, p, true, relief);
+    this.bufs[1] = this.mutateChannel(this.pristineBufs[1], this.aliveMasks[1], progress, p, true, relief);
     this.generation += 1;
-    const wear = 0.004+p.wearRate*0.02;
+    const wearMultiplier = this.bakePenaltySamplesLeft > 0 ? 2 : 1;
+    const wear = (0.004+p.wearRate*0.02)*wearMultiplier;
     this.decayFraction = Math.min(1, this.decayFraction + wear);
+    this.postState(true);
+  }
+  // Instant re-render at the current decay state with no new dropout
+  // damage - used to make Bake's on/off transition audible immediately
+  // instead of waiting for the loop to wrap around.
+  renderPreview(relief){
+    const p = this.params;
+    const progress = Math.min(1, this.decayFraction);
+    this.bufs[0] = this.mutateChannel(this.pristineBufs[0], this.aliveMasks[0], progress, p, false, relief);
+    this.bufs[1] = this.mutateChannel(this.pristineBufs[1], this.aliveMasks[1], progress, p, false, relief);
     this.postState(true);
   }
   postState(withPreview){
@@ -145,6 +189,19 @@ class TapeProcessor extends AudioWorkletProcessor {
     const p = this.params;
     const bufL = this.bufs[0], bufR = this.bufs[1];
     for(let i=0;i<out[0].length;i++){
+      if(this.bakePenaltySamplesLeft > 0) this.bakePenaltySamplesLeft--;
+      if(this.stuttering){
+        const local = this.stutterPos % this.stutterChunkLen;
+        let pos = this.stutterAnchor + this.direction*local;
+        pos = ((pos % n)+n)%n;
+        const i0 = Math.floor(pos)%n, i1 = (i0+1)%n, frac = pos-Math.floor(pos);
+        const rampSamples = Math.min(128, this.stutterChunkLen);
+        const fade = local < rampSamples ? local/rampSamples : 1;
+        out[0][i] = (bufL[i0]*(1-frac)+bufL[i1]*frac)*fade;
+        if(out.length > 1) out[1][i] = (bufR[i0]*(1-frac)+bufR[i1]*frac)*fade;
+        this.stutterPos++;
+        continue;
+      }
       this.wobblePhase1 += (2*Math.PI*0.27)/this.sr;
       this.wobblePhase2 += (2*Math.PI*0.77)/this.sr;
       const wobble = Math.sin(this.wobblePhase1)*0.6 + Math.sin(this.wobblePhase2)*0.4;
