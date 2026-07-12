@@ -44,7 +44,17 @@ def lowpass(signal, sr, cutoff_hz, order=2):
 
 def apply_dropouts(alive_mask, n, sr, kill_fraction, rng):
     """Permanently kill new chunks of tape - once dead, always dead.
-    Mutates alive_mask in place."""
+    Mutates alive_mask in place.
+
+    The chunk INTERIOR is fully killed (mask -> 0); only the ~24-sample
+    edges taper (fade in on entry, fade back out on exit) so the drop
+    doesn't click. Matches tape-processor.js's mutateChannel exactly -
+    a prior version of this function had the ramp backwards (interior
+    left untouched, only the two edges reduced), which massively
+    undercounted real kill progress relative to what `killed` claimed
+    and made high wear/dropout settings converge far slower here than
+    in the browser version. Confirmed via Craig's own maxed-settings
+    render, which reaches near-total silence by generation ~30-35."""
     samples_to_kill = int(n * kill_fraction)
     killed = 0
     attempts = 0
@@ -57,10 +67,13 @@ def apply_dropouts(alive_mask, n, sr, kill_fraction, rng):
         if span < 2 or not np.any(alive_mask[start:end] > 0.01):
             continue
         fade_len = min(24, max(1, span // 4))
-        ramp = np.ones(span)
-        ramp[:fade_len] = np.linspace(0, 1, fade_len)
-        ramp[-fade_len:] = np.minimum(ramp[-fade_len:], np.linspace(1, 0, fade_len))
-        alive_mask[start:end] = np.minimum(alive_mask[start:end], ramp)
+        idx = np.arange(span)
+        m = np.zeros(span)  # interior: fully killed by default
+        lead = idx < fade_len
+        trail = (~lead) & ((span - idx) < fade_len)
+        m[lead] = 1 - idx[lead] / fade_len
+        m[trail] = 1 - (span - idx[trail]) / fade_len
+        alive_mask[start:end] = np.minimum(alive_mask[start:end], m)
         killed += span
 
 

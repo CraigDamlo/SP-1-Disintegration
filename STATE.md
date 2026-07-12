@@ -8,6 +8,12 @@ on Teenage Engineering's SP-1 stem player (unreleased, community-hacked
 nRF52840 dev board), eventually aiming at real SP-1 firmware.
 
 ## Locked decisions (don't re-litigate these)
+- All sliders at zero should NOT mean frozen/pristine forever - some
+  baseline decay should always be happening (real tape degrades a little
+  no matter what). Confirmed by Craig via a zero-settings render: current
+  hardcoded floors (killFraction has a +0.006 floor, wear has a +0.004
+  floor, both independent of the wearRate/dropoutDensity faders) are the
+  intended behavior, not a bug.
 - Decay model: mutates a stored buffer in place on each loop pass, not a
   real-time streaming filter. Matters because it mirrors both real tape
   and how it'll need to work on eMMC-backed firmware.
@@ -135,6 +141,35 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       confirm whether the underlying save/load plumbing is still wired
       to anything or is now dead code to clean up.
 
+- [x] Phase 1.3c — real bug found and fixed in disintegration_loops.py's
+      apply_dropouts(): the ramp array defaulted to 1 (no kill) with only
+      the ~24-sample edges reduced, leaving the interior of every "killed"
+      chunk untouched - while `killed` still counted the FULL chunk span
+      as destroyed. This let the while loop exit early believing far more
+      damage had been done than actually had, making the standalone
+      Python tool decay dramatically slower than tape-processor.js at
+      identical settings (simulated: ~3000 generations to reach 20-45%
+      alive and stall there, vs. the real/JS behavior of reaching near-
+      total silence by generation ~30-35). Fixed to match
+      tape-processor.js's mutateChannel exactly: interior defaults to
+      fully killed (m=0), only the edges taper for a click-free fade.
+      Verified against Craig's own maxed-settings (wear=100, dropout=100)
+      browser render: confirmed loop length 3.0s (via envelope
+      autocorrelation, harmonics at 3/6/9/12s), RMS drops to near-zero
+      (0.03% of starting loudness) by generation ~30-35 in the real
+      render - the fixed Python function now reproduces this curve
+      almost exactly (0.04% alive by generation 39 in simulation).
+      CONFIRMED WORKING - matches real render data, not yet re-run by
+      Craig on his own machine.
+- [x] Phase 1.3d — confirmed via Craig's zero-settings render that the
+      baseline decay-even-at-zero behavior (hardcoded floors in
+      killFraction/wear, independent of the wearRate/dropoutDensity
+      faders - see the earlier high-end-loss discussion) is intentional
+      and should stay: "zero" sliders should NOT mean frozen/pristine
+      forever, some decay should always be happening, matching real tape
+      that degrades a little no matter what. No code change needed here,
+      this locks it as an intentional decision rather than a bug to fix.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -151,11 +186,11 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-Confirm the index.html side of Phase 1.3b (what the 4 track buttons do now
-that snapshot slots are gone, and whether the old loadBuffer save/load
-plumbing in tape-processor.js is still used or is dead code). After that,
-Craig picks between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real
-FWD/RWD rocker behavior).
+Craig confirms the disintegration_loops.py apply_dropouts fix (Phase 1.3c)
+on his own machine. After that: confirm the index.html side of Phase
+1.3b (track button repurposing, dead loadBuffer plumbing), then pick
+between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real FWD/RWD
+rocker behavior).
 
 ## Open questions (not yet decided)
 - Now that snapshot slots are gone, are the 4 track buttons repurposed
