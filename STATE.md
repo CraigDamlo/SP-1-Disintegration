@@ -1,6 +1,6 @@
 # SP-1 Disintegration Loops — project state
 
-Last updated: 2026-07-08
+Last updated: 2026-07-11
 
 ## What this is
 A live, tweakable simulation of Basinski-style tape disintegration, modeled
@@ -39,6 +39,7 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       snapshot slots (tap load / hold save / double-tap clear, preserves
       exact generation+decay state), volume = real +/- step buttons,
       FN hold-for-power shown as a tooltip only, not wired.
+      NOTE: snapshot slots removed in Phase 1.3b below - see that entry.
 - [x] Phase 1.2a — export: Record/Stop&save (live capture of whatever's
       playing, downloads WAV) and Quick export (instant batch render of
       N generations from current source + fader settings, no listening
@@ -112,6 +113,28 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       instead of being downmixed to mono. Waveform display shows both
       channels overlaid (R fainter) so divergence is visible.
       NOT YET confirmed by Craig by ear.
+- [x] Phase 1.3b — removed the snapshot-slot feature (the tap-load /
+      hold-save / double-tap-clear behavior on the 4 track buttons from
+      Phase 1.1) and added two new performance controls instead: Bake and
+      Stutter. Confirmed in tape-processor.js v1.9:
+        - Bake: while held, instantly blends back some already-decayed
+          audio (relief factor 0.6) via renderPreview(), rather than
+          waiting for loop wrap. On release, snaps back to the true decay
+          state and adds a 4-second wear penalty (2x kill rate) - the
+          relief is borrowed, not free.
+        - Stutter: freezes the real playhead at the anchor position and
+          repeats a ~120ms chunk (with a short fade-in ramp) while held;
+          on release, playback resumes exactly where it paused, so decay
+          progress isn't lost and no part of the loop is skipped.
+      OPEN GAP: index.html (the UI layer + what the 4 track buttons do
+      now) wasn't available when this was logged, so the exact removal
+      details on the UI side, and what if anything replaced the buttons'
+      old tap/hold/double-tap behavior, aren't confirmed here yet.
+      loadBuffer's alive-mask-threading plumbing is still present in
+      tape-processor.js, so the removal may be UI-only - needs Craig to
+      confirm whether the underlying save/load plumbing is still wired
+      to anything or is now dead code to clean up.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -128,10 +151,19 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
+Confirm the index.html side of Phase 1.3b (what the 4 track buttons do now
+that snapshot slots are gone, and whether the old loadBuffer save/load
+plumbing in tape-processor.js is still used or is dead code). After that,
 Craig picks between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real
 FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
+- Now that snapshot slots are gone, are the 4 track buttons repurposed
+  for Bake/Stutter/other, or unused? (index.html not seen yet - see
+  Phase 1.3b gap above)
+- Is the loadBuffer save/load + alive-mask-passing plumbing in
+  tape-processor.js still needed for anything, or should it be cleaned
+  out as dead code now that slots are gone?
 - Should the Reverse button become a real rocker (hold to fast-forward/
   rewind, tap to skip) per the real hardware, or stay a simple toggle?
 - Should Freeze eventually be a hardware LED state (e.g. one LED pulses)?
