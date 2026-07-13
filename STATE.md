@@ -36,6 +36,33 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   STATE.md, README.md all sit in the repo root together.
   launch-sp1.command still exists locally as a dev convenience but is
   gitignored, not tracked - README no longer references it.
+- Hardware spec claims in README/STATE.md (nRF52840, Cortex-M4 @ 64MHz,
+  256KB RAM, I2S 48kHz/24-bit, TAS2505, CS42L42, 4GB eMMC, resistor-ladder
+  buttons + GPIO Function button, 8 LEDs) were checked 2026-07-13 against
+  dot-Justin/SP-1-knowledgebase-skill (community-sourced reference library)
+  and confirmed accurate - no corrections needed. Two details worth
+  carrying forward for Phase 2/3: nRF52840 runs I2S as SLAVE (CS42L42
+  generates LRCLK, must be initialized via I2C first); the 8 LEDs are
+  addressed as two separate PWM groups on real hardware (4 Track on PWM2,
+  4 Play on PWM3), not one linear bank, which may matter if the "decay
+  meter" framing needs to map to real LED registers later.
+- Phase 2 eMMC layout direction (research only, no code yet): reviewed
+  chattock/sp1-tape-looper (real shipped SP-1 firmware, same hardware) as
+  a concrete reference. Its per-track ring buffers are ~16384 samples
+  (~341ms) for both play read-ahead and record backlog - this is the
+  empirically-tuned safety margin against eMMC housekeeping stalls, tried
+  smaller (8192/170ms - insufficient) and larger (32768/682ms - wasteful
+  once other fixes landed). It also uses ONE SHARED ring rather than one
+  per track/slot, which held up better under RAM pressure. Since this
+  project only ever has one active decay buffer (not 4 simultaneous
+  stems), the architecture is already naturally in the "one ring" case -
+  no redesign implied, just a confirmation. Working assumption for
+  Phase 2: favor a single persistent buffer + cumulative alive-mask,
+  written back in place each loop pass, over a ring of discrete
+  per-generation eMMC slots - this matches the existing in-place-mutation
+  decay model more closely than a multi-slot scheme would. If a slotted
+  layout is chosen instead, round each region to a 4096-block (2MB)
+  multiple to stay page-aligned (chattock's own convention).
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`disintegration_loops.py`)
@@ -262,6 +289,17 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
 - [ ] Phase 3 — real firmware: build against SP-1-dev toolchain, wire
       resistor-ladder buttons + Function GPIO, flash via Solderless
       web updater
+
+- [x] Phase 1.3i — research pass, no code changes: verified all hardware
+      spec claims against dot-Justin/SP-1-knowledgebase-skill (accurate,
+      see locked decisions above) and pulled concrete Phase 2 storage
+      guidance from chattock/sp1-tape-looper's real shipped firmware
+      (ring buffer sizing, shared-vs-per-slot ring tradeoff, page
+      alignment - see locked decisions above). Confirmed the real FWD/RWD
+      behavior on stock firmware is variable-speed eMMC block-skipping
+      (2.5x/4x/8x/16x tiers via reading fewer bytes/sector), not a simple
+      playback-rate multiplier - relevant once Phase 1.3's rocker work
+      moves past the browser prototype into real disk-backed streaming.
 
 ## Next action
 disintegration_loops.py is removed and the loadBuffer dead-code question
