@@ -321,16 +321,16 @@
     <dd>Fills left to right as decay progresses. Green early, amber mid-way, red near the end.</dd>
   </dl>
 
-  <h2>Faders (decay parameters)</h2>
+  <h2>Faders</h2>
   <dl>
     <dt>Wear rate</dt>
-    <dd>Overall speed of aging. Higher means every generation pushes the decay further.</dd>
+    <dd>Overall speed of aging. Higher means every generation pushes the decay further. Permanent, like the other decay parameters below.</dd>
     <dt>High&#8209;end loss</dt>
-    <dd>How aggressively treble gets filtered away as the tape wears &mdash; this is what makes late generations sound muffled.</dd>
+    <dd>How aggressively treble gets filtered away as the tape wears &mdash; this is what makes late generations sound muffled. Permanent.</dd>
     <dt>Dropout density</dt>
-    <dd>How much audio goes missing in small chunks, standing in for oxide flaking off the tape.</dd>
+    <dd>How much audio goes missing in small chunks, standing in for oxide flaking off the tape. Permanent.</dd>
     <dt>Wow &amp; flutter</dt>
-    <dd>Pitch instability that grows as the loop decays &mdash; the wobble/seasick quality of worn tape.</dd>
+    <dd>Pitch instability &mdash; the wobble/seasick quality of worn tape. Unlike the three faders above, this one is a live effect: it never touches the stored tape, so it's audible right away at any generation and fully reversible by moving the fader back down.</dd>
   </dl>
 
   <h2>Actions (the four buttons below the faders)</h2>
@@ -781,7 +781,10 @@
       killed += (end-start);
     }
 
-    const wobbleDepth = decayFraction*params.wowFlutter;
+    // Wow & Flutter is a live FX, not a decay parameter - matches the
+    // v1.10 decoupling in tape-processor.js. Audible from generation 1,
+    // set directly by the fader, independent of decayFraction.
+    const wobbleDepth = params.wowFlutter;
     const out = new Float32Array(n);
     for(let i=0;i<n;i++){
       const wobble = Math.sin(2*Math.PI*i/(sr*3.7))*0.6 + Math.sin(2*Math.PI*i/(sr*1.3))*0.4;

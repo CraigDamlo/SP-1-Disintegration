@@ -33,8 +33,9 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   github.com/timknapen/SP-1-dev. Unofficial/community, bricking is a
   real risk on real hardware.
 - Repo layout is flat, no subfolders: index.html, tape-processor.js,
-  disintegration_loops.py, launch-sp1.command, STATE.md, README.md all
-  sit in the repo root together.
+  disintegration_loops.py, STATE.md, README.md all sit in the repo root
+  together. launch-sp1.command still exists locally as a dev convenience
+  but is gitignored, not tracked - README no longer references it.
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`disintegration_loops.py`)
@@ -202,6 +203,21 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
           framing, but no change made without that decision.
       NOT YET confirmed by Craig by ear.
 
+- [x] Phase 1.3f — closed the Phase 1.3e gap: index.html's
+      offlineMutateChannel() (Quick Export path) now matches
+      tape-processor.js v1.10 - wobbleDepth is set directly from
+      params.wowFlutter, no longer gated by decayFraction, so exported
+      WAVs now have audible flutter from generation 1 matching live
+      playback. Also fixed the on-page Guide text, which still described
+      the old decay-gated behavior ("grows as the loop decays") -
+      reworded to state it's a live, reversible effect, and retitled the
+      "Faders (decay parameters)" section to plain "Faders" since Wow &
+      Flutter isn't one. Removed launch-sp1.command from README (repo
+      structure list and local-run instructions) since Craig gitignored
+      it - it's still a useful local dev convenience, just not tracked.
+      disintegration_loops.py's hardcoded wow/flutter (no CLI arg) is
+      still an open question below, untouched.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -218,11 +234,10 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-Highest priority: mirror the Phase 1.3e flutter fix into index.html's
-offlineMutateGeneration() so Quick Export matches live playback - needs
-index.html, not available this session. Also decide whether
-disintegration_loops.py should get a --wow-flutter CLI arg to match the
-new FX framing. After that: Craig confirms the disintegration_loops.py
+Phase 1.3e/f gap is closed - Quick Export now matches live flutter
+behavior. Remaining: decide whether disintegration_loops.py should get a
+--wow-flutter CLI arg to match the new FX framing (still hardcoded,
+untouched). After that: Craig confirms the disintegration_loops.py
 apply_dropouts fix (Phase 1.3c) on his own machine, confirm the
 index.html side of Phase 1.3b (track button repurposing, dead loadBuffer
 plumbing), then pick between Phase 1.2d (tuning the decay feel) or
