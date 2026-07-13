@@ -1,6 +1,6 @@
 
-// tape-processor.js v1.9 - keep this in sync with the version-tag in index.html
-console.log('[SP-1 Disintegration] tape-processor.js v1.9 loaded');
+// tape-processor.js v1.10 - keep this in sync with the version-tag in index.html
+console.log('[SP-1 Disintegration] tape-processor.js v1.10 loaded');
 
 class TapeProcessor extends AudioWorkletProcessor {
   constructor(options){
@@ -205,8 +205,15 @@ class TapeProcessor extends AudioWorkletProcessor {
       this.wobblePhase1 += (2*Math.PI*0.27)/this.sr;
       this.wobblePhase2 += (2*Math.PI*0.77)/this.sr;
       const wobble = Math.sin(this.wobblePhase1)*0.6 + Math.sin(this.wobblePhase2)*0.4;
-      const depth = this.decayFraction*p.wowFlutter;
-      const rate = 1 + wobble*depth*0.01;
+      // Flutter is a live FX, not a decay parameter - it perturbs playback
+      // speed only, never touches the buffer or the alive mask, so unlike
+      // wearRate/highEndLoss/dropoutDensity it isn't gated by
+      // decayFraction. The fader alone sets depth, audible from
+      // generation 1 regardless of wear state. Ceiling raised from 0.01
+      // to 0.05 (was ~1% max speed wobble, barely perceptible even at
+      // max fader + full decay; now ~5% at max fader, a clearly audible
+      // wow/flutter character on its own).
+      const rate = 1 + wobble*p.wowFlutter*0.05;
       this.readPos += this.direction*rate;
       if(this.readPos >= n){
         this.readPos -= n;

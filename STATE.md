@@ -14,6 +14,11 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   hardcoded floors (killFraction has a +0.006 floor, wear has a +0.004
   floor, both independent of the wearRate/dropoutDensity faders) are the
   intended behavior, not a bug.
+- Wow & Flutter is a live FX control, not a decay parameter - it doesn't
+  permanently mutate the loop (no buffer/alive-mask changes), so it
+  should NOT be gated by decayFraction like wearRate/highEndLoss/
+  dropoutDensity are. Confirmed by Craig; implemented in
+  tape-processor.js v1.10 (Phase 1.3e).
 - Decay model: mutates a stored buffer in place on each loop pass, not a
   real-time streaming filter. Matters because it mirrors both real tape
   and how it'll need to work on eMMC-backed firmware.
@@ -170,6 +175,33 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       that degrades a little no matter what. No code change needed here,
       this locks it as an intentional decision rather than a bug to fix.
 
+- [x] Phase 1.3e — v1.10: decoupled Wow & Flutter from decayFraction per
+      Craig's call that it's a live FX (perturbs playback speed only,
+      never touches the buffer or alive mask), not a permanent decay
+      parameter, so it shouldn't be gated by wear progress like the other
+      3 faders are. In tape-processor.js: `depth = decayFraction*wowFlutter`
+      -> just `p.wowFlutter` directly; audible from generation 1 now,
+      independent of wearRate. Also raised the ceiling per Craig's
+      request: `rate = 1 + wobble*depth*0.01` -> `...*0.05` (was ~1% max
+      speed wobble even at full fader + full decay, ~17 cents, barely
+      perceptible; now ~5% at max fader, clearly audible wow/flutter).
+      GAPS NOT YET CLOSED (need index.html / a look at the CLI's actual
+      exposed params to finish this properly):
+        - index.html's offlineMutateGeneration() duplicates mutateBuffer()
+          by hand per the Phase 1.2a caveat - this same edit needs
+          mirroring there or Quick Export will still use the old
+          decay-gated, capped-at-1% flutter behavior. NOT DONE, no
+          index.html available this session.
+        - disintegration_loops.py's apply_wow_flutter() was already
+          divergent before this change - it has no wowFlutter CLI
+          argument at all, it's hardcoded to `depth=decay_fraction*0.5`
+          inside process_channel() with no independent fader exposed.
+          Left as-is since there's no equivalent "FX slider" concept in
+          the batch CLI tool; flagging in case Craig wants a
+          --wow-flutter CLI arg added to match the new decoupled/FX
+          framing, but no change made without that decision.
+      NOT YET confirmed by Craig by ear.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -186,11 +218,15 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-Craig confirms the disintegration_loops.py apply_dropouts fix (Phase 1.3c)
-on his own machine. After that: confirm the index.html side of Phase
-1.3b (track button repurposing, dead loadBuffer plumbing), then pick
-between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real FWD/RWD
-rocker behavior).
+Highest priority: mirror the Phase 1.3e flutter fix into index.html's
+offlineMutateGeneration() so Quick Export matches live playback - needs
+index.html, not available this session. Also decide whether
+disintegration_loops.py should get a --wow-flutter CLI arg to match the
+new FX framing. After that: Craig confirms the disintegration_loops.py
+apply_dropouts fix (Phase 1.3c) on his own machine, confirm the
+index.html side of Phase 1.3b (track button repurposing, dead loadBuffer
+plumbing), then pick between Phase 1.2d (tuning the decay feel) or
+Phase 1.3 (real FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
 - Now that snapshot slots are gone, are the 4 track buttons repurposed
