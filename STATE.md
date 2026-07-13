@@ -234,6 +234,20 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       implementations (tape-processor.js, index.html) need to stay in
       sync going forward.
 
+- [x] Phase 1.3h — cleanup pass, no functional changes: fixed index.html's
+      version badge (was stuck at v1.8, tape-processor.js has been v1.10
+      since 1.3e - the file header's own "keep in sync" comment had gone
+      stale). Removed dead CSS (`button.extrabtn`/`.extrabtn.on`, never
+      referenced by any element - `extraghost` is the class actually
+      used for "Load your own loop..."). Removed the unreachable
+      alive-mask/generation/decayFraction threading in tape-processor.js's
+      loadBuffer handler - index.html never sent those fields (leftover
+      from the Phase 1.1 snapshot-slot concept, removed in 1.3b), so
+      every load already always reset fresh; the handler now just does
+      that directly instead of pretending to accept saved state. This
+      resolves the two open questions below about dead loadBuffer
+      plumbing.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -250,20 +264,15 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-disintegration_loops.py is removed, so the two remaining implementations
-(tape-processor.js, index.html) are the only ones that need to stay in
-sync - one less place for drift. Next: Craig confirms the index.html
-side of Phase 1.3b (track button repurposing, dead loadBuffer plumbing),
-then pick between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real
-FWD/RWD rocker behavior).
+disintegration_loops.py is removed and the loadBuffer dead-code question
+is resolved, so the two remaining implementations (tape-processor.js,
+index.html) are the only ones that need to stay in sync, and both have
+now been read in full - the Phase 1.3b gap (track buttons are Stutter/
+Freeze/Bake/Reset tape, confirmed) is closed too. Pick between Phase
+1.2d (tuning the decay feel) or Phase 1.3 (real FWD/RWD rocker
+behavior).
 
 ## Open questions (not yet decided)
-- Now that snapshot slots are gone, are the 4 track buttons repurposed
-  for Bake/Stutter/other, or unused? (index.html not seen yet - see
-  Phase 1.3b gap above)
-- Is the loadBuffer save/load + alive-mask-passing plumbing in
-  tape-processor.js still needed for anything, or should it be cleaned
-  out as dead code now that slots are gone?
 - Should the Reverse button become a real rocker (hold to fast-forward/
   rewind, tap to skip) per the real hardware, or stay a simple toggle?
 - Should Freeze eventually be a hardware LED state (e.g. one LED pulses)?

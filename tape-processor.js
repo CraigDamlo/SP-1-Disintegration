@@ -62,21 +62,19 @@ class TapeProcessor extends AudioWorkletProcessor {
         }
       }
       else if(m.type === 'loadBuffer'){
+        // Every load (upload, or Reset tape) always starts fresh at
+        // generation 0 with a clean alive mask - index.html never sends
+        // saved mask/generation/decayFraction state (that was leftover
+        // from the Phase 1.1 snapshot-slot concept, removed in 1.3b), so
+        // this no longer pretends to accept it.
         const l = new Float32Array(m.bufferL);
         const r = m.bufferR ? new Float32Array(m.bufferR) : new Float32Array(l);
         this.bufs = [l, r];
-        // The loaded buffers become the new pristine reference. Tone is
-        // always computed fresh from this reference, never cascaded, so
-        // loading a saved (already-decayed) slot resumes cleanly rather
-        // than re-compounding on top of it.
         this.pristineBufs = [l.slice(), r.slice()];
-        this.aliveMasks = [
-          m.aliveMaskL ? new Float32Array(m.aliveMaskL) : new Float32Array(l.length).fill(1),
-          m.aliveMaskR ? new Float32Array(m.aliveMaskR) : new Float32Array(r.length).fill(1)
-        ];
+        this.aliveMasks = [new Float32Array(l.length).fill(1), new Float32Array(r.length).fill(1)];
         this.readPos = this.direction === 1 ? 0 : l.length-1;
-        this.generation = m.generation || 0;
-        this.decayFraction = m.decayFraction || 0;
+        this.generation = 0;
+        this.decayFraction = 0;
         this.postState(true);
       }
     };
