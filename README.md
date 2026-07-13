@@ -25,7 +25,6 @@ Everything lives flat in the repo root (no subfolders):
 ```
 index.html                  the instrument itself
 tape-processor.js           AudioWorklet processor (must stay next to the html)
-disintegration_loops.py     standalone Python version, batch-renders decay generations to WAV
 STATE.md                    current project state, read this first
 ```
 
@@ -56,16 +55,6 @@ repurposed as performance actions (Stutter, Freeze, Bake, Reset tape),
 (visual only, not yet wired), a rocker repurposed as Reverse, an 8-LED
 decay meter, and a Record button plus a Quick Export batch renderer for
 saving what you hear as a WAV.
-
-## Running the offline version
-
-```
-python3 disintegration_loops.py my_loop.wav --generations 40
-```
-
-Renders every decay generation as a separate WAV, plus a concatenated
-full_decay.wav covering the whole arc. Stereo input stays stereo, with
-each channel decaying independently, same as the browser version.
 
 ## Target hardware
 

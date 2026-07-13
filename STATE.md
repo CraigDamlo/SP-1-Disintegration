@@ -33,9 +33,9 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
   github.com/timknapen/SP-1-dev. Unofficial/community, bricking is a
   real risk on real hardware.
 - Repo layout is flat, no subfolders: index.html, tape-processor.js,
-  disintegration_loops.py, STATE.md, README.md all sit in the repo root
-  together. launch-sp1.command still exists locally as a dev convenience
-  but is gitignored, not tracked - README no longer references it.
+  STATE.md, README.md all sit in the repo root together.
+  launch-sp1.command still exists locally as a dev convenience but is
+  gitignored, not tracked - README no longer references it.
 
 ## Phase status
 - [x] Phase 0 — offline Python proof of concept (`disintegration_loops.py`)
@@ -218,6 +218,22 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       disintegration_loops.py's hardcoded wow/flutter (no CLI arg) is
       still an open question below, untouched.
 
+- [x] Phase 1.3g — removed `disintegration_loops.py` entirely. Craig
+      confirmed he's never actually used the standalone CLI tool - it
+      wasn't wired into anything (no build step, no import from
+      index.html/tape-processor.js), so it was pure sync-maintenance
+      burden: every decay-math fix (1.2e, 1.2f, 1.2h, 1.3a, 1.3c) had to
+      be hand-mirrored into it, and it had already drifted anyway (its
+      decay_fraction curve is generation-count-based, not wearRate-
+      driven like the browser, and its wow/flutter was still hardcoded
+      with no fader - see Phase 1.3e/f). Removed from README (structure
+      list, "Running the offline version" section) and from STATE.md's
+      repo layout. Historical Phase 0/1.2e/1.2f/1.2h/1.3a/1.3c/1.3e/1.3f
+      entries below still reference it by name since they're an accurate
+      record of what happened at the time - only the two current-state
+      implementations (tape-processor.js, index.html) need to stay in
+      sync going forward.
+
 - [ ] Phase 1.2d — tuning pass: play with default decay curve, dropout
       feel, wow/flutter character; adjust constants in the worklet's
       `mutateBuffer()` (and remember to mirror any change into
@@ -234,14 +250,12 @@ nRF52840 dev board), eventually aiming at real SP-1 firmware.
       web updater
 
 ## Next action
-Phase 1.3e/f gap is closed - Quick Export now matches live flutter
-behavior. Remaining: decide whether disintegration_loops.py should get a
---wow-flutter CLI arg to match the new FX framing (still hardcoded,
-untouched). After that: Craig confirms the disintegration_loops.py
-apply_dropouts fix (Phase 1.3c) on his own machine, confirm the
-index.html side of Phase 1.3b (track button repurposing, dead loadBuffer
-plumbing), then pick between Phase 1.2d (tuning the decay feel) or
-Phase 1.3 (real FWD/RWD rocker behavior).
+disintegration_loops.py is removed, so the two remaining implementations
+(tape-processor.js, index.html) are the only ones that need to stay in
+sync - one less place for drift. Next: Craig confirms the index.html
+side of Phase 1.3b (track button repurposing, dead loadBuffer plumbing),
+then pick between Phase 1.2d (tuning the decay feel) or Phase 1.3 (real
+FWD/RWD rocker behavior).
 
 ## Open questions (not yet decided)
 - Now that snapshot slots are gone, are the 4 track buttons repurposed
